@@ -1,0 +1,30 @@
+services:
+  python:
+    container_name: ${APP_NAME}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - ${API_PORT}:8000
+      - ${JUPYTER_PORT}:8888
+    environment:
+      ENV_MODE: development
+    volumes:
+      - ${__VOLUME_PATH__}/log/${APP_NAME}:/var/volumes/log:delegated
+      - ./docker/jupyter:/root/.jupyter:delegated
+      - .:/var/workspace:delegated
+    entrypoint: ["/var/entrypoint.sh"]
+    networks:
+      - micro-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "3m"
+        max-file: "3"
+        compress: "true"
+
+networks:
+  micro-network:
+    external: true

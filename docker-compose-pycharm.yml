@@ -1,0 +1,24 @@
+services:
+  pycharm:
+    container_name: ${APP_NAME}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      ENV_MODE: development
+    entrypoint: ["tail", "-f", "/dev/null"]
+    volumes:
+      - .:/var/workspace:delegated
+    networks:
+      - micro-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "3m"
+        max-file: "3"
+        compress: "true"
+
+networks:
+  micro-network:
+    external: true
