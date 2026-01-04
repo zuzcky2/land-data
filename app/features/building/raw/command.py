@@ -1,6 +1,14 @@
 # app/features/building/raw/command.py
 
+import ast
+import os
+import re
 import click
+import time
+from multiprocessing import Process
+from datetime import datetime, timedelta
+from typing import Optional, List, Any, Dict
+
 from app.facade import command
 from app.services.building.raw import facade as raw_facade
 from app.services.building.raw.services.abstract_service import AbstractService
@@ -10,31 +18,93 @@ from app.features.contracts.command import AbstractCommand
 
 class BuildingRawCommand(AbstractCommand):
 
-    def sync_building_registers_by_township(self, service: AbstractService):
+    def _get_last_sync_point(self, service: AbstractService, renew_days: int = 7) -> Optional[dict]:
         """
-        DB에 저장된 모든 법정동(Township) 목록을 끝까지 순회하며 갱신합니다.
+        로그 파일을 분석하여 마지막 성공 지점을 반환합니다.
+        --renew 옵션이 활성화된 경우, 마지막 로그 시간이 renew_days보다 오래되면 처음부터 시작합니다.
         """
+        try:
+            from app.core.helpers.config import Config
+            from app.core.helpers.env import Env
+
+            logger_name = service.logger_name
+            logger_config = Config.get(f'logging.{logger_name}')
+            log_path = Env.get('LOG_PATH', '/var/volumes/log')
+            log_filename = os.path.join(log_path, logger_config['filename'])
+
+            if not os.path.exists(log_filename):
+                return None
+
+            with open(log_filename, 'r', encoding='utf-8') as f:
+                # 파일의 마지막 100줄을 읽어 역순으로 탐색
+                lines = f.readlines()[-100:]
+                for line in reversed(lines):
+                    if "Sync Start: " in line:
+                        # 1. 타임스탬프 파싱 (형식: 2026-01-04 20:20:16)
+                        date_match = re.search(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
+                        if date_match:
+                            log_time = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
+
+                            # 일주일 경과 확인
+                            if datetime.now() - log_time > timedelta(days=renew_days):
+                                command.message(f"⚠️ 마지막 로그 기록({log_time})이 {renew_days}일을 초과하여 처음부터 다시 시작합니다.",
+                                                fg='yellow')
+                                return None
+
+                        # 2. 파라미터 추출
+                        param_match = re.search(r"Sync Start: (\{.*\})", line)
+                        if param_match:
+                            return ast.literal_eval(param_match.group(1))
+
+        except Exception as e:
+            command.message(f"⚠️ 로그 분석 중 오류 발생: {e}", fg='yellow')
+
+        return None
+
+    def sync_building_registers_by_township(self, service: AbstractService, is_continue: bool = False,
+                                            is_renew: bool = False):
+        """
+        DB에 저장된 모든 법정동(Township) 목록을 순회하며 갱신합니다.
+        """
+
         try:
             current_township_page = 1
             per_page = 100
             total_synced_townships = 0
 
+            # 이어하기 지점 파악
+            start_item_code = None
+            if is_continue:
+                # renew 옵션이 있으면 7일 기준 적용, 없으면 무조건 이어하기
+                renew_threshold = 7 if is_renew else 9999
+                last_point = self._get_last_sync_point(service, renew_threshold)
+
+                if last_point:
+                    # sigunguCd(5) + bjdongCd(앞3) 조합으로 8자리 item_code 생성
+                    start_item_code = f"{last_point['sigunguCd']}{last_point['bjdongCd'][:3]}"
+                    command.message(f"🔄 이어하기 모드: {start_item_code} 지점부터 시작합니다.", fg='magenta')
+
             command.message('🚀 전국의 모든 법정동 순회 및 건축물대장 수집을 시작합니다.', fg='green')
 
             while True:
-                # 1. 법정동 목록 조회
+                # 1. 법정동 목록 조회 쿼리
+                query_params = {
+                    'location_type': 'township',
+                    'page': current_township_page,
+                    'per_page': per_page
+                }
+
+                # 이어하기 조건 적용 ($gte: Greater than or Equal)
+                if start_item_code:
+                    query_params['item_code'] = {'$gte': start_item_code}
+
                 township_pagination = boundary_facade.service.get_boundaries(
-                    params={
-                        'location_type': 'township',
-                        'page': current_township_page,
-                        'per_page': per_page
-                    },
+                    params=query_params,
                     driver_name='mongodb'
                 )
 
                 items = getattr(township_pagination, 'items', [])
 
-                # 가져온 아이템이 없으면 완전히 종료
                 if not items:
                     command.message(f"--- 더 이상 가져올 법정동 데이터가 없습니다. (Page: {current_township_page}) ---", fg='yellow')
                     break
@@ -45,23 +115,18 @@ class BuildingRawCommand(AbstractCommand):
                     bjdong_cd = f"{full_code[5:8]}00"
 
                     command.message(f"📦 [{township.item_full_name}] 수집 시작...", fg='cyan')
-
-                    # 해당 법정동의 모든 페이지 수집 (이미 검증된 로직)
                     self._sync_all_pages_for_township(service, sigungu_cd, bjdong_cd)
                     total_synced_townships += 1
 
-                # [수정포인트] totalCount나 last_page를 믿지 않고, 가져온 개수로 판단
                 items_count = len(items)
                 command.message(f"--- 법정동 목록 {current_township_page} 페이지 완료 ({items_count}개 처리) ---", fg='yellow')
 
-                # 가져온 개수가 per_page(100)보다 적으면 마지막 페이지임
                 if items_count < per_page:
                     break
 
-                # 100개를 꽉 채워서 가져왔다면 다음 페이지가 더 있다고 가정하고 이동
                 current_township_page += 1
 
-            command.message(f'✅ 전체 {total_synced_townships}개 법정동 수집 대장정 완료!', fg='blue')
+            command.message(f'✅ 전체 {total_synced_townships}개 법정동 수집 완료!', fg='blue')
 
         except Exception as e:
             self._handle_error(e, f"일괄 수집 프로세스 중단 @see {__file__}")
@@ -72,7 +137,6 @@ class BuildingRawCommand(AbstractCommand):
         per_page = 100
 
         while True:
-            # 서비스 호출
             sync_result = service.sync_from_dgk({
                 'sigunguCd': sigungu_cd,
                 'bjdongCd': bjdong_cd,
@@ -80,78 +144,77 @@ class BuildingRawCommand(AbstractCommand):
                 'per_page': per_page
             })
 
-            items_count = sync_result.get('count', 0)
-            total_items = sync_result.get('total', 0)
+            # 에러 발생 시 중단 (AbstractService에서 status='error' 반환 가정)
+            if sync_result.get('status') == 'error':
+                break
 
-            # [디버깅] 실제 넘어오는 total 값을 확인해봅니다.
-            # 만약 여기서 total이 100 이하로 찍힌다면 드라이버의 _get_total_count 문제입니다.
-            # command.message(f"      DEBUG: total={total_items}, count={items_count}", fg='black')
+            items_count = sync_result.get('count', 0)
 
             if items_count > 0:
                 command.message(f"  -> {current_page}p: {items_count}건 완료", fg='white')
 
-            # [수정된 탈출 조건]
-            # 1. 가져온 데이터가 아예 없으면 종료
-            if items_count == 0:
+            # 탈출 조건
+            if items_count == 0 or items_count < per_page or current_page >= 100:
                 break
 
-            # 2. 이번에 가져온 데이터가 요청한 100건보다 적으면 종료 (마지막 페이지 확신)
-            if items_count < per_page:
-                break
-
-            # 3. 만약 API가 계속 100건을 준다면, 안전장치로 100페이지(1만건)까지만 시도
-            if current_page >= 100:
-                break
-
-            # [핵심] 페이지 증가
             current_page += 1
-
-            # API 과부하 방지
-            import time
             time.sleep(0.1)
 
     def register_commands(self, cli_group):
         """CLI 그룹에 명령어 등록"""
 
-        @cli_group.command('building_raw:title_info')
-        def sync_title_info():
-            """[배치] 모든 법정동의 건축물대장 표제부를 순회하며 갱신합니다."""
-            self.sync_building_registers_by_township(raw_facade.title_info_service)
+        def create_sync_command(name, service_obj, help_text):
+            @cli_group.command(name, help=help_text)
+            @click.option('--continue', 'is_continue', is_flag=True, help='마지막 로그 지점부터 이어서 수집합니다.')
+            @click.option('--renew', 'is_renew', is_flag=True, help='일주일 이상된 로그면 처음부터 수집합니다.')
+            def _command(is_continue, is_renew):
+                self.sync_building_registers_by_township(service_obj, is_continue, is_renew)
 
-        @cli_group.command('building_raw:basic_info')
-        def sync_basic_info():
-            """[배치] 모든 법정동의 건축물대장 기본정보를 순회하며 갱신합니다."""
-            self.sync_building_registers_by_township(raw_facade.basic_info_service)
-
-        @cli_group.command('building_raw:floor_info')
-        def sync_floor_info():
-            """[배치] 모든 법정동의 건축물대장 층정보를 순회하며 갱신합니다."""
-            self.sync_building_registers_by_township(raw_facade.floor_info_service)
-
-        @cli_group.command('building_raw:area_info')
-        def sync_area_info():
-            """[배치] 모든 법정동의 건축물대장 면적정보를 순회하며 갱신합니다."""
-            self.sync_building_registers_by_township(raw_facade.area_info_service)
-
-        @cli_group.command('building_raw:price_info')
-        def sync_price_info():
-            """[배치] 모든 법정동의 건축물대장 가격정보를 순회하며 갱신합니다."""
-            self.sync_building_registers_by_township(raw_facade.price_info_service)
-
-        @cli_group.command('building_raw:address_info')
-        def sync_address_info():
-            """[배치] 모든 법정동의 건축물대장 주소정보를 순회하며 갱신합니다."""
-            self.sync_building_registers_by_township(raw_facade.address_info_service)
+        # 6개 개별 커맨드 등록
+        create_sync_command('building_raw:title_info', raw_facade.title_info_service, '표제부 수집')
+        create_sync_command('building_raw:basic_info', raw_facade.basic_info_service, '기본정보 수집')
+        create_sync_command('building_raw:floor_info', raw_facade.floor_info_service, '층정보 수집')
+        create_sync_command('building_raw:area_info', raw_facade.area_info_service, '면적정보 수집')
+        create_sync_command('building_raw:price_info', raw_facade.price_info_service, '가격정보 수집')
+        create_sync_command('building_raw:address_info', raw_facade.address_info_service, '주소정보 수집')
 
         @cli_group.command('building_raw:all')
-        def sync_all():
-            self.sync_building_registers_by_township(raw_facade.title_info_service)
-            self.sync_building_registers_by_township(raw_facade.basic_info_service)
-            self.sync_building_registers_by_township(raw_facade.floor_info_service)
-            self.sync_building_registers_by_township(raw_facade.area_info_service)
-            self.sync_building_registers_by_township(raw_facade.price_info_service)
-            self.sync_building_registers_by_township(raw_facade.address_info_service)
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_all(is_continue, is_renew):
+            """[배치] 6가지 건축물 정보 수집을 3개씩 병렬로 진행합니다."""
 
+            services = [
+                (raw_facade.title_info_service, "표제부"),
+                (raw_facade.basic_info_service, "기본정보"),
+                (raw_facade.floor_info_service, "층정보"),
+                (raw_facade.area_info_service, "면적정보"),
+                (raw_facade.price_info_service, "가격정보"),
+                (raw_facade.address_info_service, "주소정보")
+            ]
+
+            command.message(f'🔥 병렬 수집 모드 시작 (Continue={is_continue}, Renew={is_renew})', fg='green')
+
+            chunk_size = 3
+            for i in range(0, len(services), chunk_size):
+                current_chunk = services[i:i + chunk_size]
+                processes = []
+
+                for service_obj, service_name in current_chunk:
+                    command.message(f"🚀 [병렬 시작] {service_name} 프로세스 구동", fg='cyan')
+                    p = Process(
+                        target=self.sync_building_registers_by_township,
+                        args=(service_obj, is_continue, is_renew)
+                    )
+                    p.start()
+                    processes.append(p)
+
+                for p in processes:
+                    p.join()
+
+                command.message(f"✅ 그룹 수집 완료. 다음으로 이동합니다.", fg='yellow')
+
+            command.message('🏁 모든 데이터 수집 대장정 완료!', fg='blue')
 
 
 __all__ = ['BuildingRawCommand']

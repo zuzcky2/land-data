@@ -11,6 +11,10 @@ class TitleInfoService(AbstractService):
         self._manager = manager
 
     @property
+    def logger_name(self) -> str:
+        return 'building_raw_title_info'
+
+    @property
     def manager(self) -> AbstractManager:
         return self._manager
 

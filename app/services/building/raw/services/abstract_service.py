@@ -1,12 +1,23 @@
 from abc import abstractmethod, ABC
 from typing import Optional, List, Any, Dict
 from app.services.building.raw.managers.abstract_manager import AbstractManager
+from app.core.helpers.log import Log
+import logging
 
 
 class AbstractService(ABC):
     # 드라이버 이름 상수화
     DRIVER_MONGODB = 'mongodb'
     DRIVER_DGK = 'dgk'
+
+    @property
+    @abstractmethod
+    def logger_name(self) -> str:
+        return 'building_raw'
+
+    @property
+    def logger(self) -> logging.Logger:
+        return Log.get_logger(self.logger_name)
 
     @property
     @abstractmethod
@@ -41,24 +52,40 @@ class AbstractService(ABC):
         )
 
     def sync_from_dgk(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        # 드라이버 호출
-        dgk_pagination = (
-            self.manager.driver(self.DRIVER_DGK)
-            .clear()
-            .set_arguments(params)
-            .set_pagination(page=params.get('page', 1), per_page=params.get('per_page', 100))
-            .read()
-        )
+        self.logger.info(f"Sync Start: {params}")
 
-        # PaginationDto 객체에서 total과 items 추출
-        items = getattr(dgk_pagination, 'items', [])
-        total = getattr(dgk_pagination, 'total', 0)
+        try:
+            # 드라이버 호출 및 데이터 읽기
+            dgk_pagination = (
+                self.manager.driver(self.DRIVER_DGK)
+                .clear()
+                .set_arguments(params)
+                .set_pagination(page=params.get('page', 1), per_page=params.get('per_page', 100))
+                .read()
+            )
 
-        if items:
-            self.manager.driver(self.DRIVER_MONGODB).store(items)
+            # PaginationDto 객체에서 total과 items 추출
+            items = getattr(dgk_pagination, 'items', [])
+            total = getattr(dgk_pagination, 'total', 0)
 
-        return {
-            'total': total,  # 이 값이 358이어야 Command에서 4페이지까지 돕니다.
-            'count': len(items),
-            'page': getattr(dgk_pagination, 'page', 1)
-        }
+            if items:
+                self.manager.driver(self.DRIVER_MONGODB).store(items)
+
+            return {
+                'total': total,
+                'count': len(items),
+                'page': getattr(dgk_pagination, 'page', 1),
+                'status': 'success'
+            }
+
+        except Exception as e:
+            # 에러 발생 시 상세 정보 로깅 (나중에 재개 프로그램이 읽을 포인트)
+            error_msg = (
+                f"[SYNC_STOP_ERROR] | Message: {str(e)} | "
+                f"Params: sigunguCd={params.get('sigunguCd')}, "
+                f"bjdongCd={params.get('bjdongCd')}, "
+                f"page={params.get('page')}"
+            )
+            self.logger.error(error_msg)
+
+            raise e

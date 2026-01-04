@@ -61,13 +61,15 @@ configs: dict = {
     # API 로깅 설정 (요청/응답 추적용)
     'api': _create_logging_config('api', 'api.log'),
 
-    'mysql': _create_logging_config('mysql', 'mysql.log'),
-
-    'opensearch': _create_logging_config('opensearch', 'opensearch.log'),
-
     'mongodb': _create_logging_config('mongodb', 'mongodb.log'),
 
-    'house_sync': _create_logging_config('house_sync', 'house_sync.log'),
+    'building_raw': _create_logging_config('building_raw', 'building_raw.log'),
+    'building_raw_title_info': _create_logging_config('building_raw_title_info', 'building_raw_title_info.log'),
+    'building_raw_basic_info': _create_logging_config('building_raw_basic_info', 'building_raw_basic_info.log'),
+    'building_raw_floor_info': _create_logging_config('building_raw_floor_info', 'building_raw_floor_info.log'),
+    'building_raw_area_info': _create_logging_config('building_raw_area_info', 'building_raw_area_info.log'),
+    'building_raw_price_info': _create_logging_config('building_raw_price_info', 'building_raw_price_info.log'),
+    'building_raw_address_info': _create_logging_config('building_raw_address_info', 'building_raw_address_info.log'),
 }
 
 __all__ = ['configs']
