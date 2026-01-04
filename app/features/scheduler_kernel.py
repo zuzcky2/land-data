@@ -128,6 +128,32 @@ class SchedulerRegistry:
         except ImportError as e:
             logger.error(f"지역경계 스케줄러 모듈 로드 실패: {e}")
 
+    def register_building_raw_schedules(self) -> None:
+        """건축물대장 원천 데이터 수집 스케줄 등록"""
+        try:
+            from app.features.building.raw.command import BuildingRawCommand
+
+            # 커맨드 인스턴스 생성
+            building_cmd = BuildingRawCommand()
+
+            # 매일 오전 00:00 실행
+            # max_instances=1: 이전 작업이 끝나지 않았으면 새 작업을 시작하지 않음
+            # coalesce=True: 시스템 장애 등으로 밀린 작업이 있어도 한 번만 실행
+            self.register(ScheduleConfig(
+                func=lambda: building_cmd.sync_all(is_continue=True, is_renew=True),
+                trigger='cron',
+                hour=0,
+                minute=0,
+                job_id='building_raw_sync_all',
+                name='건축물대장 전체 정보 일괄 수집 (병렬)',
+                max_instances=1,
+                coalesce=True,
+                environments=['development', 'production']
+            ))
+
+        except ImportError as e:
+            logger.error(f"건축물대장 스케줄러 모듈 로드 실패: {e}")
+
 
     def register_all(self) -> None:
         """모든 스케줄 등록"""
@@ -135,6 +161,7 @@ class SchedulerRegistry:
 
         # 각 서비스별 스케줄 등록
         self.register_boundary_schedules()
+        self.register_building_raw_schedules()
 
         logger.info("스케줄링 작업 등록 완료")
 
