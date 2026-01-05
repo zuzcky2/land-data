@@ -142,8 +142,8 @@ class SchedulerRegistry:
             self.register(ScheduleConfig(
                 func=lambda: building_cmd.sync_all(is_continue=True, is_renew=True),
                 trigger='cron',
-                hour=0,
-                minute=0,
+                hour=10,
+                minute=40,
                 job_id='building_raw_sync_all',
                 name='건축물대장 전체 정보 일괄 수집 (병렬)',
                 max_instances=1,
