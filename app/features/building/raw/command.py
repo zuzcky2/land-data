@@ -160,6 +160,42 @@ class BuildingRawCommand(AbstractCommand):
             current_page += 1
             time.sleep(0.1)
 
+    def handle_sync_all(self, is_continue: bool, is_renew: bool):
+        """
+        스케줄러와 CLI 양쪽에서 호출할 수 있는 공통 실행 메서드
+        """
+        services = [
+            (raw_facade.title_info_service, "표제부"),
+            (raw_facade.basic_info_service, "기본정보"),
+            (raw_facade.floor_info_service, "층정보"),
+            (raw_facade.area_info_service, "면적정보"),
+            (raw_facade.price_info_service, "가격정보"),
+            (raw_facade.address_info_service, "주소정보")
+        ]
+
+        command.message(f'🔥 전체 데이터 병렬 수집 시작 (Continue={is_continue}, Renew={is_renew})', fg='green')
+
+        chunk_size = 3
+        for i in range(0, len(services), chunk_size):
+            current_chunk = services[i:i + chunk_size]
+            processes = []
+
+            for service_obj, service_name in current_chunk:
+                command.message(f"🚀 [병렬 시작] {service_name} 프로세스 구동", fg='cyan')
+                p = Process(
+                    target=self.sync_building_registers_by_township,
+                    args=(service_obj, is_continue, is_renew)
+                )
+                p.start()
+                processes.append(p)
+
+            for p in processes:
+                p.join()
+
+            command.message(f"✅ 그룹 수집 완료. 다음으로 이동합니다.", fg='yellow')
+
+        command.message('🏁 모든 데이터 수집 대장정 완료!', fg='blue')
+
     def register_commands(self, cli_group):
         """CLI 그룹에 명령어 등록"""
 
@@ -181,40 +217,9 @@ class BuildingRawCommand(AbstractCommand):
         @cli_group.command('building_raw:all')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
-        def sync_all(is_continue, is_renew):
-            """[배치] 6가지 건축물 정보 수집을 3개씩 병렬로 진행합니다."""
-
-            services = [
-                (raw_facade.title_info_service, "표제부"),
-                (raw_facade.basic_info_service, "기본정보"),
-                (raw_facade.floor_info_service, "층정보"),
-                (raw_facade.area_info_service, "면적정보"),
-                (raw_facade.price_info_service, "가격정보"),
-                (raw_facade.address_info_service, "주소정보")
-            ]
-
-            command.message(f'🔥 병렬 수집 모드 시작 (Continue={is_continue}, Renew={is_renew})', fg='green')
-
-            chunk_size = 3
-            for i in range(0, len(services), chunk_size):
-                current_chunk = services[i:i + chunk_size]
-                processes = []
-
-                for service_obj, service_name in current_chunk:
-                    command.message(f"🚀 [병렬 시작] {service_name} 프로세스 구동", fg='cyan')
-                    p = Process(
-                        target=self.sync_building_registers_by_township,
-                        args=(service_obj, is_continue, is_renew)
-                    )
-                    p.start()
-                    processes.append(p)
-
-                for p in processes:
-                    p.join()
-
-                command.message(f"✅ 그룹 수집 완료. 다음으로 이동합니다.", fg='yellow')
-
-            command.message('🏁 모든 데이터 수집 대장정 완료!', fg='blue')
+        def sync_all_cli(is_continue, is_renew):
+            # 추출한 공통 메서드 호출
+            self.handle_sync_all(is_continue, is_renew)
 
 
 __all__ = ['BuildingRawCommand']

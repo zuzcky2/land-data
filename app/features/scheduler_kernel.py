@@ -24,9 +24,10 @@ from pytz import timezone
 
 from app.facade import scheduler
 from app.core.helpers.env import Env
+from app.core.helpers.log import Log
 
 # 스케줄러 전용 로거
-logger: logging.Logger = logging.getLogger('scheduler')
+logger: logging.Logger = Log.get_logger('scheduler')
 
 # 기본 타임존 설정 (한국 시간)
 KST_TIMEZONE = timezone('Asia/Seoul')
@@ -140,10 +141,10 @@ class SchedulerRegistry:
             # max_instances=1: 이전 작업이 끝나지 않았으면 새 작업을 시작하지 않음
             # coalesce=True: 시스템 장애 등으로 밀린 작업이 있어도 한 번만 실행
             self.register(ScheduleConfig(
-                func=lambda: building_cmd.sync_all(is_continue=True, is_renew=True),
+                func=lambda: building_cmd.handle_sync_all(is_continue=True, is_renew=True),
                 trigger='cron',
-                hour=10,
-                minute=40,
+                hour=1,
+                minute=0,
                 job_id='building_raw_sync_all',
                 name='건축물대장 전체 정보 일괄 수집 (병렬)',
                 max_instances=1,
@@ -154,6 +155,21 @@ class SchedulerRegistry:
         except ImportError as e:
             logger.error(f"건축물대장 스케줄러 모듈 로드 실패: {e}")
 
+    def register_test_schedules(self) -> None:
+        """스케줄러 동작 확인을 위한 테스트 스케줄 (1분마다 실행)"""
+
+        def test_logging_job():
+            import datetime
+            logger.info(f"🔔 [Scheduler Test] 현재 시간: {datetime.datetime.now(KST_TIMEZONE)} - 스케줄러가 정상 작동 중입니다.")
+
+        self.register(ScheduleConfig(
+            func=test_logging_job,
+            trigger='cron',
+            minute=30,  # 매 30분 실행
+            job_id='scheduler_heartbeat_test',
+            name='스케줄러 동작 테스트(1분 간격)',
+            environments=['local', 'development', 'production']  # 모든 환경에서 확인
+        ))
 
     def register_all(self) -> None:
         """모든 스케줄 등록"""
@@ -162,6 +178,7 @@ class SchedulerRegistry:
         # 각 서비스별 스케줄 등록
         self.register_boundary_schedules()
         self.register_building_raw_schedules()
+        self.register_test_schedules()
 
         logger.info("스케줄링 작업 등록 완료")
 

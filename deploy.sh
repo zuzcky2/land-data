@@ -79,4 +79,23 @@ else
     docker-compose -f docker-compose.yml up --build -d
 
     echo -e "${MSG_PREFIX}✅ Development 모드 - Docker Compose 실행 완료\n"
+
+    echo -e "${MSG_PREFIX}♻️  Scheduler 프로세스 재시작 준비 중 (잠시 대기)...\n"
+
+    # 2. Supervisor 소켓이 생성될 때까지 최대 10초 대기
+    MAX_RETRIES=10
+    COUNT=0
+    while ! docker-compose exec -T python ls /var/run/supervisor.sock >/dev/null 2>&1; do
+        sleep 1
+        COUNT=$((COUNT + 1))
+        if [ $COUNT -ge $MAX_RETRIES ]; then
+            echo -e "${MSG_PREFIX}#ERROR Supervisor가 시작되지 않았습니다. 로그를 확인하세요."
+            exit 1
+        fi
+    done
+
+    # 3. 이제 안전하게 재시작 명령 전달
+    docker-compose exec -T python supervisorctl restart scheduler
+
+    echo -e "${MSG_PREFIX}✅ Development 모드 - Docker Compose 및 Scheduler 재시작 완료\n"
 fi
