@@ -64,12 +64,15 @@ configs: dict = {
     'mongodb': _create_logging_config('mongodb', 'mongodb.log'),
 
     'building_raw': _create_logging_config('building_raw', 'building_raw.log'),
-    'building_raw_title_info': _create_logging_config('building_raw_title_info', 'building_raw_title_info.log'),
-    'building_raw_basic_info': _create_logging_config('building_raw_basic_info', 'building_raw_basic_info.log'),
-    'building_raw_floor_info': _create_logging_config('building_raw_floor_info', 'building_raw_floor_info.log'),
-    'building_raw_area_info': _create_logging_config('building_raw_area_info', 'building_raw_area_info.log'),
-    'building_raw_price_info': _create_logging_config('building_raw_price_info', 'building_raw_price_info.log'),
-    'building_raw_address_info': _create_logging_config('building_raw_address_info', 'building_raw_address_info.log'),
+    'building_raw_group_info': _create_logging_config('building_raw_group_info', 'building_raw/building_raw_group_info.log'),
+    'building_raw_title_info': _create_logging_config('building_raw_title_info', 'building_raw/building_raw_title_info.log'),
+    'building_raw_basic_info': _create_logging_config('building_raw_basic_info', 'building_raw/building_raw_basic_info.log'),
+    'building_raw_floor_info': _create_logging_config('building_raw_floor_info', 'building_raw/building_raw_floor_info.log'),
+    'building_raw_area_info': _create_logging_config('building_raw_area_info', 'building_raw/building_raw_area_info.log'),
+    'building_raw_price_info': _create_logging_config('building_raw_price_info', 'building_raw/building_raw_price_info.log'),
+    'building_raw_address_info': _create_logging_config('building_raw_address_info', 'building_raw/building_raw_address_info.log'),
+    'building_raw_relation_info': _create_logging_config('building_raw_relation_info', 'building_raw/building_raw_relation_info.log'),
+    'building_raw_zone_info': _create_logging_config('building_raw_zone_info', 'building_raw/building_raw_zone_info.log'),
 }
 
 __all__ = ['configs']

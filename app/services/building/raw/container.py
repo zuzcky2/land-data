@@ -7,25 +7,45 @@ from app.services.building.raw.drivers.basic_info.basic_info_dgk import BasicInf
 from app.services.building.raw.drivers.basic_info.basic_info_mongodb import BasicInfoMongodbDriver
 from app.services.building.raw.drivers.floor_info.floor_info_dgk import FloorInfoDgkDriver
 from app.services.building.raw.drivers.floor_info.floor_info_mongodb import FloorInfoMongodbDriver
+from app.services.building.raw.drivers.group_info.group_info_dgk import GroupInfoDgkDriver
+from app.services.building.raw.drivers.group_info.group_info_mongodb import GroupInfoMongodbDriver
 from app.services.building.raw.drivers.price_info.price_info_dgk import PriceInfoDgkDriver
 from app.services.building.raw.drivers.price_info.price_info_mongodb import PriceInfoMongodbDriver
+from app.services.building.raw.drivers.relation_info.relation_info_dgk import RelationInfoDgkDriver
+from app.services.building.raw.drivers.relation_info.relation_info_mongodb import RelationInfoMongodbDriver
 from app.services.building.raw.drivers.title_info.title_info_dgk import TitleInfoDgkDriver
 from app.services.building.raw.drivers.title_info.title_info_mongodb import TitleInfoMongodbDriver
+from app.services.building.raw.drivers.zone_info.zone_info_dgk import ZoneInfoDgkDriver
+from app.services.building.raw.drivers.zone_info.zone_info_mongodb import ZoneInfoMongodbDriver
 from app.services.building.raw.managers.address_info_manager import AddressInfoManager
 from app.services.building.raw.managers.area_info_manager import AreaInfoManager
 from app.services.building.raw.managers.basic_info_manager import BasicInfoManager
 from app.services.building.raw.managers.floor_info_manager import FloorInfoManager
+from app.services.building.raw.managers.group_info_manager import GroupInfoManager
 from app.services.building.raw.managers.price_info_manager import PriceInfoManager
+from app.services.building.raw.managers.relation_info_manager import RelationInfoManager
 from app.services.building.raw.managers.title_info_manager import TitleInfoManager
+from app.services.building.raw.managers.zone_info_manager import ZoneInfoManager
 from app.services.building.raw.services.address_info_service import AddressInfoService
 from app.services.building.raw.services.area_info_service import AreaInfoService
 from app.services.building.raw.services.basic_info_service import BasicInfoService
 from app.services.building.raw.services.floor_info_service import FloorInfoService
+from app.services.building.raw.services.group_info_service import GroupInfoService
 from app.services.building.raw.services.price_info_service import PriceInfoService
+from app.services.building.raw.services.relation_info_service import RelationInfoService
 from app.services.building.raw.services.title_info_service import TitleInfoService
+from app.services.building.raw.services.zone_info_service import ZoneInfoService
 
 
 class RawContainer(AbstractContainer):
+    group_info_dgk_driver: GroupInfoDgkDriver = providers.Factory(GroupInfoDgkDriver)
+    group_info_mongodb_driver: GroupInfoMongodbDriver = providers.Factory(GroupInfoMongodbDriver)
+    group_info_manager: GroupInfoManager = providers.Singleton(
+        GroupInfoManager,
+        dgk_driver=group_info_dgk_driver,
+        mongodb_driver=group_info_mongodb_driver,
+    )
+    group_info_service: GroupInfoService = providers.Singleton(GroupInfoService, manager=group_info_manager)
 
     title_info_dgk_driver: TitleInfoDgkDriver = providers.Factory(TitleInfoDgkDriver)
     title_info_mongodb_driver: TitleInfoMongodbDriver = providers.Factory(TitleInfoMongodbDriver)
@@ -80,3 +100,21 @@ class RawContainer(AbstractContainer):
         mongodb_driver=address_info_mongodb_driver,
     )
     address_info_service: AddressInfoService = providers.Singleton(AddressInfoService, manager=address_info_manager)
+
+    relation_info_dgk_driver: RelationInfoDgkDriver = providers.Factory(RelationInfoDgkDriver)
+    relation_info_mongodb_driver: RelationInfoMongodbDriver = providers.Factory(RelationInfoMongodbDriver)
+    relation_info_manager: RelationInfoManager = providers.Singleton(
+        RelationInfoManager,
+        dgk_driver=relation_info_dgk_driver,
+        mongodb_driver=relation_info_mongodb_driver,
+    )
+    relation_info_service: RelationInfoService = providers.Singleton(RelationInfoService, manager=relation_info_manager)
+
+    zone_info_dgk_driver: ZoneInfoDgkDriver = providers.Factory(ZoneInfoDgkDriver)
+    zone_info_mongodb_driver: ZoneInfoMongodbDriver = providers.Factory(ZoneInfoMongodbDriver)
+    zone_info_manager: ZoneInfoManager = providers.Singleton(
+        ZoneInfoManager,
+        dgk_driver=zone_info_dgk_driver,
+        mongodb_driver=zone_info_mongodb_driver,
+    )
+    zone_info_service: ZoneInfoService = providers.Singleton(ZoneInfoService, manager=zone_info_manager)

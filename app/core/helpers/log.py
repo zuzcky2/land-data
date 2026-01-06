@@ -30,6 +30,11 @@ class Log:
         log_path = Env.get('LOG_PATH', '/var/volumes/log')
         log_filename = os.path.join(log_path, logger_config['filename'])
 
+        # 🚀 [추가] 로그 파일이 저장될 디렉토리 생성
+        log_dir = os.path.dirname(log_filename)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+
         logger = logging.getLogger(logger_name)
         logger.setLevel(logger_config['level'])
         logger.propagate = False  # 중복 방지

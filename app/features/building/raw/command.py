@@ -165,12 +165,15 @@ class BuildingRawCommand(AbstractCommand):
         스케줄러와 CLI 양쪽에서 호출할 수 있는 공통 실행 메서드
         """
         services = [
+            (raw_facade.group_info_service, "총괄표제부"),
             (raw_facade.title_info_service, "표제부"),
             (raw_facade.basic_info_service, "기본정보"),
             (raw_facade.floor_info_service, "층정보"),
             (raw_facade.area_info_service, "면적정보"),
             (raw_facade.price_info_service, "가격정보"),
-            (raw_facade.address_info_service, "주소정보")
+            (raw_facade.address_info_service, "주소정보"),
+            (raw_facade.relation_info_service, "지번관계"),
+            (raw_facade.zone_info_service, "지역지구"),
         ]
 
         command.message(f'🔥 전체 데이터 병렬 수집 시작 (Continue={is_continue}, Renew={is_renew})', fg='green')
@@ -207,12 +210,15 @@ class BuildingRawCommand(AbstractCommand):
                 self.sync_building_registers_by_township(service_obj, is_continue, is_renew)
 
         # 6개 개별 커맨드 등록
+        create_sync_command('building_raw:group_info', raw_facade.group_info_service, '총괄표제부 수집')
         create_sync_command('building_raw:title_info', raw_facade.title_info_service, '표제부 수집')
         create_sync_command('building_raw:basic_info', raw_facade.basic_info_service, '기본정보 수집')
         create_sync_command('building_raw:floor_info', raw_facade.floor_info_service, '층정보 수집')
         create_sync_command('building_raw:area_info', raw_facade.area_info_service, '면적정보 수집')
         create_sync_command('building_raw:price_info', raw_facade.price_info_service, '가격정보 수집')
         create_sync_command('building_raw:address_info', raw_facade.address_info_service, '주소정보 수집')
+        create_sync_command('building_raw:relation_info', raw_facade.relation_info_service, '지번관계 수집')
+        create_sync_command('building_raw:zone_info', raw_facade.zone_info_service, '지역지구 수집')
 
         @cli_group.command('building_raw:all')
         @click.option('--continue', 'is_continue', is_flag=True)
