@@ -11,7 +11,7 @@ class ZoneInfoService(AbstractService):
 
     @property
     def logger_name(self) -> str:
-        return 'building_raw_relation_info'
+        return 'building_raw_zone_info'
 
     @property
     def manager(self) -> AbstractManager:
