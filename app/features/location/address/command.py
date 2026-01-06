@@ -15,7 +15,7 @@ from app.features.contracts.command import AbstractCommand
 
 class LocationAddressCommand(AbstractCommand):
 
-    def _get_last_sync_point(self, service: SearchService, source_type: str, renew_days: int = 7) -> Optional[dict]:
+    def _get_last_sync_point(self, service: SearchService, source_type: str, renew_days: int = 30) -> Optional[dict]:
         """로그 파일 분석을 통해 소스 타입별 마지막 처리 지점을 반환합니다."""
         try:
             from app.core.helpers.config import Config
