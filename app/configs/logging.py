@@ -73,6 +73,9 @@ configs: dict = {
     'building_raw_address_info': _create_logging_config('building_raw_address_info', 'building_raw/building_raw_address_info.log'),
     'building_raw_relation_info': _create_logging_config('building_raw_relation_info', 'building_raw/building_raw_relation_info.log'),
     'building_raw_zone_info': _create_logging_config('building_raw_zone_info', 'building_raw/building_raw_zone_info.log'),
+
+    'location_address_search_group': _create_logging_config('location_address_search_group', 'location/address_search_group.log'),
+    'location_address_search_title': _create_logging_config('location_address_search_title', 'location/address_search_title.log'),
 }
 
 __all__ = ['configs']
