@@ -163,13 +163,14 @@ class SchedulerRegistry:
             # 커맨드 인스턴스 생성
             address_cmd = LocationAddressCommand()
 
-            # 매일 오전 03:00 실행
-            # max_instances=1: 이전 작업이 끝나지 않았으면 새 작업을 시작하지 않음
-            # coalesce=True: 시스템 장애 등으로 밀린 작업이 있어도 한 번만 실행
+            # 매월 1일 오후 09:00(21:00) 실행
+            # day=1: 매월 1일
+            # hour=21: 밤 9시
             self.register(ScheduleConfig(
                 func=lambda: address_cmd.handle_sync_all(is_continue=True, is_renew=True),
                 trigger='cron',
-                hour=3,
+                day=1,
+                hour=21,
                 minute=0,
                 job_id='location_address_sync_all',
                 name='총괄, 표제부 기반 주소 동기화',
