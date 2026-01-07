@@ -1,9 +1,9 @@
 from typing import List, Any
-from app.services.location.address.drivers.abstract_jgk_driver import AbstractJgkDriver
-from app.services.location.address.drivers.driver_interface import DriverInterface
+from app.services.location.raw.drivers.abstract_jgk_driver import AbstractJgkDriver
+from app.services.location.raw.drivers.driver_interface import DriverInterface
 
 
-class SearchJgkDriver(AbstractJgkDriver, DriverInterface):
+class AddressJgkDriver(AbstractJgkDriver, DriverInterface):
 
     @property
     def api_path(self) -> str:

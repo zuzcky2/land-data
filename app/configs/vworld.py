@@ -14,6 +14,8 @@ DEFAULT_CRS: Final[str] = 'EPSG:4326'  # 기본 좌표 참조 시스템 (WGS84 �
 
 # VWorld API 설정 구성
 configs: dict = {
+    'host': Env.get('V_WORLD_HOST', ''),
+
     # API 인증 키 (환경변수에서 로드, 필수값)
     'key': Env.get('V_WORLD_API_KEY', ''),
 

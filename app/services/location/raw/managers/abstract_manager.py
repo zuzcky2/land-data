@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-from app.services.location.address.drivers.driver_interface import DriverInterface
+from app.services.location.raw.drivers.driver_interface import DriverInterface
 from app.services.contracts.manager import AbstractManager as ContractAbstractManager
 
 
@@ -24,6 +24,3 @@ class AbstractManager(ContractAbstractManager, ABC):
 
     def _create_mongodb_driver(self) -> DriverInterface:
         return self.mongodb_driver
-
-    def _create_jgk_driver(self) -> DriverInterface:
-        return self.jgk_driver
