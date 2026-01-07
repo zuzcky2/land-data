@@ -15,7 +15,7 @@ class AddressMongodbDriver(AbstractMongodbDriver, DriverInterface):
     def collection(self) -> Collection:
         return db.get_mongodb_driver('mongodb') \
                             .get_database('landmark') \
-                            .get_collection('location_address_search')
+                            .get_collection('location_raw_address')
 
     @property
     def convert_types(self) -> dict:
