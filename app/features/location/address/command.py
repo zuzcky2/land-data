@@ -194,7 +194,6 @@ class LocationAddressCommand(AbstractCommand):
             query_params = {
                 'page': 1,
                 'per_page': per_page,
-                'bdMgtSn': '4121010400112730000010705',
                 'sort': [('_id', 1)]
             }
             if last_id:
