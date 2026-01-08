@@ -15,7 +15,7 @@ from app.services.location.raw.services.continuous_geometry_service import Conti
 from app.services.location.raw.services.point_geometry_service import PointGeometryService
 
 
-class AddressContainer(AbstractContainer):
+class RawContainer(AbstractContainer):
     address_jgk_driver: AddressJgkDriver = providers.Factory(AddressJgkDriver)
     address_mongodb_driver: AddressMongodbDriver = providers.Factory(AddressMongodbDriver)
     address_manager: AddressManager = providers.Singleton(

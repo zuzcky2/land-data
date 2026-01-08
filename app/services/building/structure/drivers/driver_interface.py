@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Any
 
+from app.services.contracts.drivers.abstract import AbstractDriver
 
-class DriverInterface(ABC):
+
+class DriverInterface(AbstractDriver, ABC):
     @abstractmethod
     def _fetch_raw(self, single: bool = False) -> List[dict]:
         """데이터 소스(API 또는 DB)로부터 원본 dict 리스트를 가져옵니다."""

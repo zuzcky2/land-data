@@ -20,7 +20,7 @@ class PointGeometryService(AbstractService):
     def get_list_by_chain(self, params: Dict[str, Any]) -> Any:
         """DB 목록 조회 -> 만료 검사 -> VWorld 주소 검색 -> PNU 매칭 -> 저장"""
         mongodb_driver = self.manager.driver(self.DRIVER_MONGODB)
-        bd_mgt_sn = params.get('bdMgtSn')
+        bd_mgt_sn = params.get('bd_mgt_sn')
 
         # 1. 로컬 DB 조회
         pagination = mongodb_driver.clear().set_pagination(

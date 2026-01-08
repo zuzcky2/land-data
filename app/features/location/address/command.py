@@ -12,6 +12,7 @@ from app.services.location.boundary import facade as boundary_facade
 from app.services.location.raw.services.address_service import AddressService
 from app.services.building.raw import facade as building_facade
 from app.features.contracts.command import AbstractCommand
+from app.services.building.structure import facade as structure_facade
 from app.core.helpers.log import Log
 
 
@@ -169,20 +170,13 @@ class LocationAddressCommand(AbstractCommand):
         command.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
 
     def handle_build_address(self, is_continue: bool = False, is_renew: bool = False):
-        """
-        수집된 주소 마스터를 바탕으로 좌표 및 공간정보를 결합(Build)합니다.
-        로그 기반 이어하기 및 30일 갱신 로직이 포함되어 있습니다.
-        """
-        service = address_facade.address_service
+        service = address_facade.address_service  # 원천 데이터 서비스
         per_page = 1000
         total_count = 0
         last_id = None
 
-        # 1. 이어하기 지점 파악 (build 전용 로그 소스 사용)
         if is_continue:
-            # 갱신 주기: is_renew가 True면 30일, 아니면 무제한(9999)
             renew_threshold = 30 if is_renew else 9999
-            # build_address 작업은 'build'라는 별도 소스로 로그를 관리한다고 가정
             last_point = self._get_last_sync_point(service, 'build', renew_threshold)
 
             if last_point and '_id' in last_point:
@@ -193,18 +187,14 @@ class LocationAddressCommand(AbstractCommand):
                     last_id = last_point['_id']
                 command.message(f"🔄 빌드 이어하기: {last_id} 이후부터 시작합니다.", fg='magenta')
 
-        # 2. 행정구역 BBOX 캐시 (API 호출 최소화)
-        boundary_cache = {}
         command.message("🏗️ 주소 기반 공간정보 빌드 작업을 시작합니다.", fg='green')
-
-        # 로그 기록을 위한 커스텀 로거 가져오기
         build_logger = Log.get_logger(f"{service.logger_name}_build")
 
         while True:
-            # Cursor 방식: 항상 page=1
             query_params = {
                 'page': 1,
                 'per_page': per_page,
+                'bdMgtSn': '4121010400112730000010705',
                 'sort': [('_id', 1)]
             }
             if last_id:
@@ -219,71 +209,33 @@ class LocationAddressCommand(AbstractCommand):
 
             for item in items:
                 try:
-                    # 로그 기록 (Sync Start 형식을 맞춰야 _get_last_sync_point가 읽을 수 있음)
-                    build_logger.info(
-                        f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{item.get('bdMgtSn')}'}}")
-
                     bd_mgt_sn = item.get('bdMgtSn')
                     if not bd_mgt_sn:
                         last_id = item['_id']
                         continue
 
-                    # 3. 행정구역 BBOX 캐싱
-                    adm_cd_5 = bd_mgt_sn[:5]
-                    if adm_cd_5 not in boundary_cache:
-                        boundary = boundary_facade.service.get_boundary(
-                            {'item_code': adm_cd_5, 'use_polygon': False})
-                        boundary_cache[adm_cd_5] = boundary.bbox if boundary else None
+                    # 로그 기록 (Sync Start 형식을 맞춰야 이어하기 가능)
+                    build_logger.info(
+                        f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{bd_mgt_sn}'}}")
 
-                    bbox = boundary_cache[adm_cd_5]
+                    # 🚀 구조화된 서비스 호출 (빌드 + 병합 + 저장)
+                    address_dto = structure_facade.address_service.build_by_address_raw(item)
 
-                    # 4. 주소 쿼리 생성 (도로명 + 본번 + 부번)
-                    road_query = f"{item.get('rn', '')} {item.get('buldMnnm', '')}"
-                    if item.get('buldSlno') and str(item['buldSlno']).strip() not in ['', '0']:
-                        road_query += f"-{item['buldSlno']}"
-
-                    # 5. 좌표(Point) 수집 Chain 호출
-                    point_pagination = address_facade.point_geometry_service.get_list_by_chain({
-                        'pnu': bd_mgt_sn[:19],
-                        'bdMgtSn': bd_mgt_sn,
-                        'query': road_query,
-                        'bbox': bbox,
-                        'page': 1,
-                        'per_page': 1000
-                    })
-
-                    # 6. 지적도(Continuous) 수집 및 포인트 보정
-                    for point_item in getattr(point_pagination, 'items', []):
-                        point = point_item.get('point', {})
-                        if not point.get('x') or not point.get('y'):
-                            continue
-
-                        continuous = address_facade.continuous_geometry_service.get_detail_by_chain({
-                            'id': point_item.get('continuous_id'),
-                            'bdMgtSn': bd_mgt_sn,
-                            'latitude': float(point['x']),
-                            'longitude': float(point['y'])
-                        })
-
-                        if continuous and 'id' in continuous and not point_item.get('continuous_id'):
-                            point_item['continuous_id'] = continuous['id']
-                            address_facade.point_geometry_service.manager.mongodb_driver.store([point_item])
-
-                    # 7. 상태 갱신
                     last_id = item['_id']
                     total_count += 1
+
                     if total_count % 100 == 0:
                         command.message(f"  -> {total_count}건 공간정보 결합 중... (현재 ID: {last_id})", fg='white')
 
                 except Exception as e:
-                    command.message(f"⚠️ 에러 (ID: {item.get('_id')}): {e}", fg='red')
+                    command.message(f"❌ 에러 (ID: {item.get('_id')}): {e}", fg='red')
                     last_id = item['_id']
                     continue
 
             if len(items) < per_page:
                 break
 
-            time.sleep(0.05)
+            time.sleep(0.01)  # 대기 시간 최적화
 
         command.message(f"🎉 빌드 완료! 총 {total_count}건 처리됨.", fg='blue')
 
