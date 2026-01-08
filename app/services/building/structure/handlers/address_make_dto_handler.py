@@ -29,7 +29,8 @@ class AddressDtoHandler:
         processed_related_blocks = self._process_related_blocks(
             address_raw.get('relJibun', []),
             full_state,
-            district_boundary.item_name
+            district_boundary.item_name,
+            township_boundary.item_name
         )
 
         # 4. 도로명/지번 본부번 결합 (예: 123-0 -> 123)
@@ -117,7 +118,7 @@ class AddressDtoHandler:
             first_shape = valid_shapes[0]
             return mapping(first_shape), first_shape.centroid
 
-    def _process_related_blocks(self, rel_jibun: Any, state_name: str, district_name: str) -> List[str]:
+    def _process_related_blocks(self, rel_jibun: Any, state_name: str, district_name: str, township_name: str) -> List[str]:
         """관련 지번 리스트 가공 로직"""
         if not rel_jibun:
             return []
@@ -133,6 +134,7 @@ class AddressDtoHandler:
             parts = []
             if state_name not in clean_b: parts.append(state_name)
             if district_name not in clean_b: parts.append(district_name)
+            if district_name not in clean_b: parts.append(township_name)
             parts.append(clean_b)
             results.append(' '.join(parts))
         return results
