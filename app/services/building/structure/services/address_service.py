@@ -70,11 +70,18 @@ class AddressService(AbstractService):
             if address_raw.get('buldSlno') and str(address_raw['buldSlno']).strip() not in ['', '0']:
                 road_query += f"-{address_raw['buldSlno']}"
 
+            parcel_unit_addresses = [address_raw.get('lnbrMnnm')]
+            if address_raw.get('lnbrSlno'):
+                parcel_unit_addresses.append(address_raw.get('lnbrSlno'))
+
+
             # 3. 좌표(Point) 수집
             point_pagination = self._raw_point_geometry_service.get_list_by_chain({
                 'pnu': bd_mgt_sn[:19],
                 'bd_mgt_sn': bd_mgt_sn,
                 'query': road_query,
+                'road_full_address': address_raw.get('roadAddr'),
+                'parcel_address': f"{address_raw.get('emdNm')} {'-'.join(parcel_unit_addresses)}",
                 'bbox': bbox,
                 'page': 1,
                 'per_page': 1000

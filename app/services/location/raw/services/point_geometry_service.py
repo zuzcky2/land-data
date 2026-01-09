@@ -32,7 +32,7 @@ class PointGeometryService(AbstractService):
             pagination.items = []
 
         # 3. 데이터가 없을 경우 VWorld 주소 검색(Geocoding) 수행
-        if not pagination.items:
+        if len(pagination.items) < 1:
             vworld_driver = self.manager.driver(self.DRIVER_VWORLD)
 
             # BBOX와 쿼리로 좌표 검색
@@ -46,7 +46,9 @@ class PointGeometryService(AbstractService):
 
             for item in getattr(vworld_pagination, 'items', []):
                 # 검색 결과 중 요청한 PNU와 일치하는 데이터만 선별
-                if item.get('id') == target_pnu:
+                if (item.get('id') == target_pnu
+                        or item.get('address', {}).get('road') == params.get('road_full_address')
+                        or item.get('address', {}).get('parcel') == params.get('parcel_address')):
                     point = item.get('point', {})
                     x, y = point.get('x'), point.get('y')
 

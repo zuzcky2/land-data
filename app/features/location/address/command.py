@@ -14,6 +14,7 @@ from app.services.building.raw import facade as building_facade
 from app.features.contracts.command import AbstractCommand
 from app.services.building.structure import facade as structure_facade
 from app.core.helpers.log import Log
+from multiprocessing import Pool, cpu_count
 
 
 class LocationAddressCommand(AbstractCommand):
@@ -169,74 +170,101 @@ class LocationAddressCommand(AbstractCommand):
         total_time = int(time.time() - start_time)
         command.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
 
+    @staticmethod
+    def _worker_build_task(item: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        각 코어에서 독립적으로 실행될 빌드 태스크
+        """
+        try:
+            # 🚀 중요: 프로세스마다 독립적인 facade 인스턴스를 보장하기 위해 내부에서 import
+            from app.services.building.structure import facade as structure_facade
+
+            # 로거 이름 명시적 확인 (location_raw_address_build 형식 등)
+            logger_name = f"{structure_facade.address_service.logger_name}_build"
+
+            build_logger = Log.get_logger(logger_name)
+
+            bd_mgt_sn = item.get('bdMgtSn')
+            if not bd_mgt_sn:
+                return {'success': False, 'id': item.get('_id'), 'error': 'No bdMgtSn'}
+
+            # 1. 실제 빌드 서비스 호출
+            structure_facade.address_service.build_by_address_raw(item)
+
+            # 2. 개별 성공 로그 기록 (Sync Start 형식을 맞춰야 이어하기가 읽을 수 있음)
+            # 이어하기 로직(_get_last_sync_point)은 파일의 아래쪽부터 'Sync Start'를 찾으므로
+            # 이렇게 매 건마다 남기면 중단 시점의 정확한 ID를 잡을 수 있습니다.
+            build_logger.info(
+                f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{bd_mgt_sn}'}}"
+            )
+
+            return {'success': True, 'id': item.get('_id')}
+        except Exception as e:
+            return {'success': False, 'id': item.get('_id'), 'error': str(e)}
+
     def handle_build_address(self, is_continue: bool = False, is_renew: bool = False):
-        service = address_facade.address_service  # 원천 데이터 서비스
+        service = address_facade.address_service
         per_page = 1000
         total_count = 0
         last_id = None
 
+        # 1. 이어하기 지점 파악 (기존 로직 유지)
         if is_continue:
             renew_threshold = 30 if is_renew else 9999
             last_point = self._get_last_sync_point(service, 'build', renew_threshold)
-
             if last_point and '_id' in last_point:
                 from bson import ObjectId
                 try:
                     last_id = ObjectId(last_point['_id'])
                 except:
                     last_id = last_point['_id']
-                command.message(f"🔄 빌드 이어하기: {last_id} 이후부터 시작합니다.", fg='magenta')
+                command.message(f"🔄 이어하기: {last_id}부터 시작", fg='magenta')
 
-        command.message("🏗️ 주소 기반 공간정보 빌드 작업을 시작합니다.", fg='green')
-        build_logger = Log.get_logger(f"{service.logger_name}_build")
+        command.message("🏗️ [4-Core] 멀티프로세싱 공간정보 빌드를 시작합니다.", fg='green')
 
-        while True:
-            query_params = {
-                'page': 1,
-                'per_page': per_page,
-                'sort': [('_id', 1)]
-            }
-            if last_id:
-                query_params['_id'] = {'$gt': last_id}
 
-            address_pagination = service.get_list(query_params)
-            items = getattr(address_pagination, 'items', [])
+        # 2. 4개의 워커 프로세스 생성
+        with Pool(processes=4) as pool:
+            while True:
+                query_params = {
+                    'page': 1,
+                    'per_page': per_page,
+                    'sort': [('_id', 1)]
+                }
+                if last_id:
+                    query_params['_id'] = {'$gt': last_id}
 
-            if not items:
-                command.message("✅ 모든 주소에 대한 빌드 작업을 마쳤습니다.", fg='blue')
-                break
+                address_pagination = service.get_list(query_params)
+                items = getattr(address_pagination, 'items', [])
 
-            for item in items:
-                try:
-                    bd_mgt_sn = item.get('bdMgtSn')
-                    if not bd_mgt_sn:
-                        last_id = item['_id']
-                        continue
+                if not items:
+                    command.message("✅ 빌드 완료", fg='blue')
+                    break
 
-                    # 로그 기록 (Sync Start 형식을 맞춰야 이어하기 가능)
-                    build_logger.info(
-                        f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{bd_mgt_sn}'}}")
+                # 3. 병렬 처리 실행
+                # 32GB 메모리이므로 chunksize를 조절해 오버헤드를 더 줄일 수도 있습니다.
+                results = pool.map(self._worker_build_task, items)
 
-                    # 🚀 구조화된 서비스 호출 (빌드 + 병합 + 저장)
-                    address_dto = structure_facade.address_service.build_by_address_raw(item)
+                # 4. 결과 집계 및 에러 출력
+                chunk_success_count = sum(1 for r in results if r['success'])
+                for r in results:
+                    if not r['success'] and r.get('error') != 'No bdMgtSn':
+                        command.message(f"❌ 에러 (ID: {r['id']}): {r['error']}", fg='red')
 
-                    last_id = item['_id']
-                    total_count += 1
+                # 5. 마지막 처리 지점 업데이트 및 로그 기록
+                last_item = items[-1]
+                last_id = last_item['_id']
+                total_count += len(items)
 
-                    if total_count % 100 == 0:
-                        command.message(f"  -> {total_count}건 공간정보 결합 중... (현재 ID: {last_id})", fg='white')
+                command.message(
+                    f"  -> {total_count}건 처리 중... (성공: {chunk_success_count}/{len(items)}, ID: {last_id})",
+                    fg='white'
+                )
 
-                except Exception as e:
-                    command.message(f"❌ 에러 (ID: {item.get('_id')}): {e}", fg='red')
-                    last_id = item['_id']
-                    continue
+                if len(items) < per_page:
+                    break
 
-            if len(items) < per_page:
-                break
-
-            time.sleep(0.01)  # 대기 시간 최적화
-
-        command.message(f"🎉 빌드 완료! 총 {total_count}건 처리됨.", fg='blue')
+        command.message(f"✨ 전체 작업 종료 (총 {total_count}건)", fg='blue', bg='white')
 
     def register_commands(self, cli_group):
         """CLI 명령어 등록"""
