@@ -149,9 +149,12 @@ class SchedulerRegistry:
                 environments=['development', 'production']
             ))
 
+            from app.features.building.structure.command import StructureBuildCommand
+            structure_build_cmd = StructureBuildCommand()
+
             # 2. 공간정보 빌드: 매주 월요일 오전 00:00
             self.register(ScheduleConfig(
-                func=lambda: address_cmd.handle_build_address(is_continue=True, is_renew=True),
+                func=lambda: structure_build_cmd.handle(is_continue=True, is_renew=True),
                 trigger='cron',
                 day_of_week='mon',
                 hour=0,
