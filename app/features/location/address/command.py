@@ -8,14 +8,10 @@ from typing import Optional, Dict, Any
 
 from app.facade import command
 from app.services.location.raw import facade as address_facade
-from app.services.location.boundary import facade as boundary_facade
 from app.services.location.raw.services.address_service import AddressService
 from app.services.building.raw import facade as building_facade
 from app.features.contracts.command import AbstractCommand
-from app.services.building.structure import facade as structure_facade
 from app.core.helpers.log import Log
-from multiprocessing import Pool, cpu_count
-
 
 class LocationAddressCommand(AbstractCommand):
 
@@ -25,7 +21,6 @@ class LocationAddressCommand(AbstractCommand):
             from app.core.helpers.config import Config
             from app.core.helpers.env import Env
 
-            # 서비스 기본 로거 이름 뒤에 소스 타입을 붙여서 로그 파일 식별 (예: building_raw_group)
             full_logger_name = f"{service.logger_name}_{source_type}"
             logger_config = Config.get(f'logging.{full_logger_name}')
 
@@ -39,11 +34,9 @@ class LocationAddressCommand(AbstractCommand):
                 return None
 
             with open(log_filename, 'r', encoding='utf-8') as f:
-                # 마지막 100줄을 읽어 역순 탐색
                 lines = f.readlines()[-100:]
                 for line in reversed(lines):
                     if "Sync Start: " in line:
-                        # 타임스탬프 파싱 및 갱신 주기 확인
                         date_match = re.search(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
                         if date_match:
                             log_time = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
@@ -59,7 +52,7 @@ class LocationAddressCommand(AbstractCommand):
         return None
 
     def sync_address_by_building_info(self, source_type: str, is_continue: bool = False, is_renew: bool = False):
-        """실제 주소 동기화 로직"""
+        """건축물대장 기반 주소 마스터 동기화 로직"""
         service = address_facade.address_service
 
         if source_type == 'group':
@@ -87,7 +80,6 @@ class LocationAddressCommand(AbstractCommand):
         command.message(f"🚀 {msg_prefix} 기반 주소 마스터 수집을 시작합니다.", fg='green')
 
         while True:
-            # Cursor 기반: 항상 page=1
             query_params = {
                 'page': 1,
                 'per_page': per_page,
@@ -123,7 +115,6 @@ class LocationAddressCommand(AbstractCommand):
                         'bldNm': item.get('bldNm')
                     }
 
-                    # 소스별 로깅을 위해 source 인자 전달
                     result = service.sync_from_jgk(sync_params, source=source_type)
 
                     update_data = {}
@@ -154,146 +145,35 @@ class LocationAddressCommand(AbstractCommand):
 
             time.sleep(0.05)
 
-
     def handle_sync_all(self, is_continue: bool = False, is_renew: bool = False):
         """총괄 및 표제부 순차 동기화"""
         command.message("📅 스케줄러: 주소 동기화 작업을 시작합니다.", fg='cyan')
-
         start_time = time.time()
 
-        # 1. 총괄표제부
         self.sync_address_by_building_info('group', is_continue, is_renew)
-
-        # 2. 표제부
         self.sync_address_by_building_info('title', is_continue, is_renew)
 
         total_time = int(time.time() - start_time)
         command.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
 
-    @staticmethod
-    def _worker_build_task(item: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        각 코어에서 독립적으로 실행될 빌드 태스크
-        """
-        try:
-            # 🚀 중요: 프로세스마다 독립적인 facade 인스턴스를 보장하기 위해 내부에서 import
-            from app.services.building.structure import facade as structure_facade
-
-            # 로거 이름 명시적 확인 (location_raw_address_build 형식 등)
-            logger_name = f"{structure_facade.address_service.logger_name}_build"
-
-            build_logger = Log.get_logger(logger_name)
-
-            bd_mgt_sn = item.get('bdMgtSn')
-            if not bd_mgt_sn:
-                return {'success': False, 'id': item.get('_id'), 'error': 'No bdMgtSn'}
-
-            # 1. 실제 빌드 서비스 호출
-            structure_facade.address_service.build_by_address_raw(item)
-
-            # 2. 개별 성공 로그 기록 (Sync Start 형식을 맞춰야 이어하기가 읽을 수 있음)
-            # 이어하기 로직(_get_last_sync_point)은 파일의 아래쪽부터 'Sync Start'를 찾으므로
-            # 이렇게 매 건마다 남기면 중단 시점의 정확한 ID를 잡을 수 있습니다.
-            build_logger.info(
-                f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{bd_mgt_sn}'}}"
-            )
-
-            return {'success': True, 'id': item.get('_id')}
-        except Exception as e:
-            return {'success': False, 'id': item.get('_id'), 'error': str(e)}
-
-    def handle_build_address(self, is_continue: bool = False, is_renew: bool = False):
-        service = address_facade.address_service
-        per_page = 1000
-        total_count = 0
-        last_id = None
-
-        # 1. 이어하기 지점 파악 (기존 로직 유지)
-        if is_continue:
-            renew_threshold = 30 if is_renew else 9999
-            last_point = self._get_last_sync_point(service, 'build', renew_threshold)
-            if last_point and '_id' in last_point:
-                from bson import ObjectId
-                try:
-                    last_id = ObjectId(last_point['_id'])
-                except:
-                    last_id = last_point['_id']
-                command.message(f"🔄 이어하기: {last_id}부터 시작", fg='magenta')
-
-        command.message("🏗️ [4-Core] 멀티프로세싱 공간정보 빌드를 시작합니다.", fg='green')
-
-
-        # 2. 4개의 워커 프로세스 생성
-        with Pool(processes=4) as pool:
-            while True:
-                query_params = {
-                    'page': 1,
-                    'per_page': per_page,
-                    'sort': [('_id', 1)]
-                }
-                if last_id:
-                    query_params['_id'] = {'$gt': last_id}
-
-                address_pagination = service.get_list(query_params)
-                items = getattr(address_pagination, 'items', [])
-
-                if not items:
-                    command.message("✅ 빌드 완료", fg='blue')
-                    break
-
-                # 3. 병렬 처리 실행
-                # 32GB 메모리이므로 chunksize를 조절해 오버헤드를 더 줄일 수도 있습니다.
-                results = pool.map(self._worker_build_task, items)
-
-                # 4. 결과 집계 및 에러 출력
-                chunk_success_count = sum(1 for r in results if r['success'])
-                for r in results:
-                    if not r['success'] and r.get('error') != 'No bdMgtSn':
-                        command.message(f"❌ 에러 (ID: {r['id']}): {r['error']}", fg='red')
-
-                # 5. 마지막 처리 지점 업데이트 및 로그 기록
-                last_item = items[-1]
-                last_id = last_item['_id']
-                total_count += len(items)
-
-                command.message(
-                    f"  -> {total_count}건 처리 중... (성공: {chunk_success_count}/{len(items)}, ID: {last_id})",
-                    fg='white'
-                )
-
-                if len(items) < per_page:
-                    break
-
-        command.message(f"✨ 전체 작업 종료 (총 {total_count}건)", fg='blue', bg='white')
-
     def register_commands(self, cli_group):
-        """CLI 명령어 등록"""
-
-        @cli_group.command('location_address:sync_by_group')
+        """Sync 관련 CLI 명령어 등록"""
+        @cli_group.command('location_raw:sync_address_by_group')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_group(is_continue, is_renew):
             self.sync_address_by_building_info('group', is_continue, is_renew)
 
-        @cli_group.command('location_address:sync_by_title')
+        @cli_group.command('location_raw:sync_address_by_title')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_title(is_continue, is_renew):
             self.sync_address_by_building_info('title', is_continue, is_renew)
 
-        @cli_group.command('location_address:sync_all')
+        @cli_group.command('location_raw:sync_address_all')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_all_cmd(is_continue, is_renew):
             self.handle_sync_all(is_continue, is_renew)
-
-        @cli_group.command('address:build', help='수집된 주소 기반 공간정보 결합')
-        @click.option('--continue', 'is_continue', is_flag=True, help='마지막 지점부터 이어서 빌드합니다.')
-        @click.option('--renew', 'is_renew', is_flag=True, help='30일 이상된 로그면 처음부터 빌드합니다.')
-        def build_address_cmd(is_continue, is_renew):
-            # 🚀 self를 통해 클래스 메서드를 호출해야 합니다.
-            self.handle_build_address(is_continue, is_renew)
-
-
 
 __all__ = ['LocationAddressCommand']

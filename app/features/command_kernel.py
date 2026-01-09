@@ -21,12 +21,14 @@ def get_command_list() -> List[Any]:
         from app.features.location.boundary.command import BoundaryCommand
         from app.features.building.raw.command import BuildingRawCommand
         from app.features.location.address.command import LocationAddressCommand
+        from app.features.building.structure.command import StructureBuildCommand
 
         # 현재 등록된 명령어 클래스들
         command_classes = [
             BoundaryCommand(),              # 지역 경계 데이터 관련 명령어들
             BuildingRawCommand(), # 건축물 원본 데이터 관련 명령어들
             LocationAddressCommand(),
+            StructureBuildCommand()
         ]
 
         logger.info(f"명령어 클래스 로드 완료: {len(command_classes)}개")
