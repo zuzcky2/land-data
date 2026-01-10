@@ -94,7 +94,6 @@ class LocationAddressCommand(AbstractCommand):
 
                 if source_type == 'title':
                     query_params['bun'] = {'$ne': '0000'}
-                    query_params['regstrKindCd'] = '2'
 
                 pagination = building_service.get_list(query_params, driver_name='mongodb')
                 items = pagination.items or []
