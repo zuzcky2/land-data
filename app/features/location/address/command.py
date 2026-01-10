@@ -41,14 +41,14 @@ class LocationAddressCommand(AbstractCommand):
                         if date_match:
                             log_time = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
                             if datetime.now() - log_time > timedelta(days=renew_days):
-                                command.message(f"⚠️ {source_type} 로그 기록이 {renew_days}일을 초과하여 처음부터 시작합니다.", fg='yellow')
+                                self.message(f"⚠️ {source_type} 로그 기록이 {renew_days}일을 초과하여 처음부터 시작합니다.", fg='yellow')
                                 return None
 
                         param_match = re.search(r"Sync Start: (\{.*\})", line)
                         if param_match:
                             return ast.literal_eval(param_match.group(1))
         except Exception as e:
-            command.message(f"⚠️ {source_type} 로그 분석 오류: {e}", fg='yellow')
+            self.message(f"⚠️ {source_type} 로그 분석 오류: {e}", fg='yellow')
         return None
 
     def sync_address_by_building_info(self, source_type: str, is_continue: bool = False, is_renew: bool = False):
@@ -62,99 +62,109 @@ class LocationAddressCommand(AbstractCommand):
             building_service = building_facade.title_info_service
             msg_prefix = "🏠 [표제부]"
 
-        per_page = 1000
-        total_count = 0
-        last_id = None
+        self._send_slack(f"🚀 {msg_prefix} 주소 동기화 가동")
 
-        if is_continue:
-            renew_threshold = 7 if is_renew else 9999
-            last_point = self._get_last_sync_point(service, source_type, renew_threshold)
-            if last_point and '_id' in last_point:
-                from bson import ObjectId
-                try:
-                    last_id = ObjectId(last_point['_id'])
-                except:
-                    last_id = last_point['_id']
-                command.message(f"🔄 {msg_prefix} 이어하기: {last_id} 이후부터 시작합니다.", fg='magenta')
+        try:
+            per_page = 1000
+            total_count = 0
+            last_id = None
 
-        command.message(f"🚀 {msg_prefix} 기반 주소 마스터 수집을 시작합니다.", fg='green')
+            if is_continue:
+                renew_threshold = 7 if is_renew else 9999
+                last_point = self._get_last_sync_point(service, source_type, renew_threshold)
+                if last_point and '_id' in last_point:
+                    from bson import ObjectId
+                    try:
+                        last_id = ObjectId(last_point['_id'])
+                    except:
+                        last_id = last_point['_id']
+                    self.message(f"🔄 {msg_prefix} 이어하기: {last_id} 이후부터 시작합니다.", fg='magenta')
 
-        while True:
-            query_params = {
-                'page': 1,
-                'per_page': per_page,
-                'sort': [('_id', 1)]
-            }
+            self.message(f"🚀 {msg_prefix} 기반 주소 마스터 수집을 시작합니다.", fg='green')
 
-            if last_id:
-                query_params['_id'] = {'$gt': last_id}
+            while True:
+                query_params = {
+                    'page': 1,
+                    'per_page': per_page,
+                    'sort': [('_id', 1)]
+                }
 
-            if source_type == 'title':
-                query_params['bun'] = {'$ne': '0000'}
-                query_params['regstrKindCd'] = '2'
+                if last_id:
+                    query_params['_id'] = {'$gt': last_id}
 
-            pagination = building_service.get_list(query_params, driver_name='mongodb')
-            items = pagination.items or []
+                if source_type == 'title':
+                    query_params['bun'] = {'$ne': '0000'}
+                    query_params['regstrKindCd'] = '2'
 
-            if not items:
-                command.message(f"✅ {msg_prefix} 모든 데이터를 처리했습니다.", fg='blue')
-                break
+                pagination = building_service.get_list(query_params, driver_name='mongodb')
+                items = pagination.items or []
 
-            for item in items:
-                try:
-                    keyword = item.get('newPlatPlc', '').strip() or item.get('platPlc', '').strip()
-                    if not keyword:
+                if not items:
+                    self.message(f"✅ {msg_prefix} 모든 데이터를 처리했습니다.", fg='blue')
+                    break
+
+                for item in items:
+                    try:
+                        keyword = item.get('newPlatPlc', '').strip() or item.get('platPlc', '').strip()
+                        if not keyword:
+                            last_id = item['_id']
+                            continue
+
+                        sync_params = {
+                            '_id': str(item['_id']),
+                            'block_address': item.get('platPlc'),
+                            'road_address': item.get('newPlatPlc'),
+                            'mgmBldrgstPk': item.get('mgmBldrgstPk'),
+                            'bldNm': item.get('bldNm')
+                        }
+
+                        result = service.sync_from_jgk(sync_params, source=source_type)
+
+                        update_data = {}
+                        if result.get('status') == 'success' and result.get('bdMgtSn'):
+                            update_data['bdMgtSn'] = result['bdMgtSn']
+                        elif result.get('status') == 'fail' and result.get('dead'):
+                            update_data['dead'] = True
+
+                        if update_data:
+                            building_service.manager.driver('mongodb').collection.update_one(
+                                {'_id': item['_id']},
+                                {'$set': update_data}
+                            )
+
+                        last_id = item['_id']
+                        total_count += 1
+
+                        if total_count % 50 == 0:
+                            self.message(f"  -> {msg_prefix} {total_count}건 처리 완료 (ID: {last_id})", fg='white')
+
+                    except Exception as e:
+                        self.message(f"❌ PK {item.get('mgmBldrgstPk')} 에러: {e}", fg='red')
                         last_id = item['_id']
                         continue
 
-                    sync_params = {
-                        '_id': str(item['_id']),
-                        'block_address': item.get('platPlc'),
-                        'road_address': item.get('newPlatPlc'),
-                        'mgmBldrgstPk': item.get('mgmBldrgstPk'),
-                        'bldNm': item.get('bldNm')
-                    }
+                if len(items) < per_page:
+                    break
 
-                    result = service.sync_from_jgk(sync_params, source=source_type)
+                time.sleep(0.05)
 
-                    update_data = {}
-                    if result.get('status') == 'success' and result.get('bdMgtSn'):
-                        update_data['bdMgtSn'] = result['bdMgtSn']
-                    elif result.get('status') == 'fail' and result.get('dead'):
-                        update_data['dead'] = True
+            self._send_slack(f"✅ {msg_prefix} 완료 (총 {total_count}건)")
 
-                    if update_data:
-                        building_service.manager.driver('mongodb').collection.update_one(
-                            {'_id': item['_id']},
-                            {'$set': update_data}
-                        )
-
-                    last_id = item['_id']
-                    total_count += 1
-
-                    if total_count % 50 == 0:
-                        command.message(f"  -> {msg_prefix} {total_count}건 처리 완료 (ID: {last_id})", fg='white')
-
-                except Exception as e:
-                    command.message(f"❌ PK {item.get('mgmBldrgstPk')} 에러: {e}", fg='red')
-                    last_id = item['_id']
-                    continue
-
-            if len(items) < per_page:
-                break
-
-            time.sleep(0.05)
+        except Exception as e:
+            self._handle_error(e, f"{msg_prefix} 주소 동기화 중단")
 
     def handle_sync_all(self, is_continue: bool = False, is_renew: bool = False):
         """총괄 및 표제부 순차 동기화"""
-        command.message("📅 스케줄러: 주소 동기화 작업을 시작합니다.", fg='cyan')
+        self._send_slack("📅 주소 동기화 전체 프로세스 가동")
+        self.message("📅 스케줄러: 주소 동기화 작업을 시작합니다.", fg='cyan')
         start_time = time.time()
 
         self.sync_address_by_building_info('group', is_continue, is_renew)
         self.sync_address_by_building_info('title', is_continue, is_renew)
 
         total_time = int(time.time() - start_time)
-        command.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
+        self.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
+        self._send_slack(f"✨ 주소 동기화 전체 완료 (소요시간: {total_time}초)")
 
     def register_commands(self, cli_group):
         """Sync 관련 CLI 명령어 등록"""

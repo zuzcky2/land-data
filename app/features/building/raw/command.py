@@ -1,5 +1,3 @@
-# app/features/building/raw/command.py
-
 import ast
 import os
 import re
@@ -9,7 +7,6 @@ from multiprocessing import Process
 from datetime import datetime, timedelta
 from typing import Optional, List, Any, Dict
 
-from app.facade import command
 from app.services.building.raw import facade as raw_facade
 from app.services.building.raw.services.abstract_service import AbstractService
 from app.services.location.boundary import facade as boundary_facade
@@ -47,7 +44,7 @@ class BuildingRawCommand(AbstractCommand):
 
                             # 일주일 경과 확인
                             if datetime.now() - log_time > timedelta(days=renew_days):
-                                command.message(f"⚠️ 마지막 로그 기록({log_time})이 {renew_days}일을 초과하여 처음부터 다시 시작합니다.",
+                                self.message(f"⚠️ 마지막 로그 기록({log_time})이 {renew_days}일을 초과하여 처음부터 다시 시작합니다.",
                                                 fg='yellow')
                                 return None
 
@@ -57,7 +54,7 @@ class BuildingRawCommand(AbstractCommand):
                             return ast.literal_eval(param_match.group(1))
 
         except Exception as e:
-            command.message(f"⚠️ 로그 분석 중 오류 발생: {e}", fg='yellow')
+            self.message(f"⚠️ 로그 분석 중 오류 발생: {e}", fg='yellow')
 
         return None
 
@@ -66,6 +63,7 @@ class BuildingRawCommand(AbstractCommand):
         """
         DB에 저장된 모든 법정동(Township) 목록을 순회하며 갱신합니다.
         """
+        self._send_slack(f"🚀 [{service.logger_name}] 수집 프로세스 구동")
 
         try:
             current_township_page = 1
@@ -82,9 +80,9 @@ class BuildingRawCommand(AbstractCommand):
                 if last_point:
                     # sigunguCd(5) + bjdongCd(앞3) 조합으로 8자리 item_code 생성
                     start_item_code = f"{last_point['sigunguCd']}{last_point['bjdongCd'][:3]}"
-                    command.message(f"🔄 이어하기 모드: {start_item_code} 지점부터 시작합니다.", fg='magenta')
+                    self.message(f"🔄 이어하기 모드: {start_item_code} 지점부터 시작합니다.", fg='magenta')
 
-            command.message('🚀 전국의 모든 법정동 순회 및 건축물대장 수집을 시작합니다.', fg='green')
+            self.message('🚀 전국의 모든 법정동 순회 및 건축물대장 수집을 시작합니다.', fg='green')
 
             while True:
                 # 1. 법정동 목록 조회 쿼리
@@ -106,7 +104,7 @@ class BuildingRawCommand(AbstractCommand):
                 items = getattr(township_pagination, 'items', [])
 
                 if not items:
-                    command.message(f"--- 더 이상 가져올 법정동 데이터가 없습니다. (Page: {current_township_page}) ---", fg='yellow')
+                    self.message(f"--- 더 이상 가져올 법정동 데이터가 없습니다. (Page: {current_township_page}) ---", fg='yellow')
                     break
 
                 for township in items:
@@ -114,19 +112,20 @@ class BuildingRawCommand(AbstractCommand):
                     sigungu_cd = full_code[:5]
                     bjdong_cd = f"{full_code[5:8]}00"
 
-                    command.message(f"📦 [{township.item_full_name}] 수집 시작...", fg='cyan')
+                    self.message(f"📦 [{township.item_full_name}] 수집 시작...", fg='cyan')
                     self._sync_all_pages_for_township(service, sigungu_cd, bjdong_cd)
                     total_synced_townships += 1
 
                 items_count = len(items)
-                command.message(f"--- 법정동 목록 {current_township_page} 페이지 완료 ({items_count}개 처리) ---", fg='yellow')
+                self.message(f"--- 법정동 목록 {current_township_page} 페이지 완료 ({items_count}개 처리) ---", fg='yellow')
 
                 if items_count < per_page:
                     break
 
                 current_township_page += 1
 
-            command.message(f'✅ 전체 {total_synced_townships}개 법정동 수집 완료!', fg='blue')
+            self.message(f'✅ 전체 {total_synced_townships}개 법정동 수집 완료!', fg='blue')
+            self._send_slack(f"✅ [{service.logger_name}] 완료 (총 {total_synced_townships}개 법정동)")
 
         except Exception as e:
             self._handle_error(e, f"일괄 수집 프로세스 중단 @see {__file__}")
@@ -151,7 +150,7 @@ class BuildingRawCommand(AbstractCommand):
             items_count = sync_result.get('count', 0)
 
             if items_count > 0:
-                command.message(f"  -> {current_page}p: {items_count}건 완료", fg='white')
+                self.message(f"  -> {current_page}p: {items_count}건 완료", fg='white')
 
             # 탈출 조건
             if items_count == 0 or items_count < per_page or current_page >= 100:
@@ -176,7 +175,8 @@ class BuildingRawCommand(AbstractCommand):
             (raw_facade.zone_info_service, "지역지구"),
         ]
 
-        command.message(f'🔥 전체 데이터 병렬 수집 시작 (Continue={is_continue}, Renew={is_renew})', fg='green')
+        self.message(f'🔥 전체 데이터 병렬 수집 시작 (Continue={is_continue}, Renew={is_renew})', fg='green')
+        self._send_slack(f"🔥 전체 수집 대장정 시작 (Continue={is_continue})")
 
         chunk_size = 3
         for i in range(0, len(services), chunk_size):
@@ -184,7 +184,7 @@ class BuildingRawCommand(AbstractCommand):
             processes = []
 
             for service_obj, service_name in current_chunk:
-                command.message(f"🚀 [병렬 시작] {service_name} 프로세스 구동", fg='cyan')
+                self.message(f"🚀 [병렬 시작] {service_name} 프로세스 구동", fg='cyan')
                 p = Process(
                     target=self.sync_building_registers_by_township,
                     args=(service_obj, is_continue, is_renew)
@@ -195,9 +195,10 @@ class BuildingRawCommand(AbstractCommand):
             for p in processes:
                 p.join()
 
-            command.message(f"✅ 그룹 수집 완료. 다음으로 이동합니다.", fg='yellow')
+            self.message(f"✅ 그룹 수집 완료. 다음으로 이동합니다.", fg='yellow')
 
-        command.message('🏁 모든 데이터 수집 대장정 완료!', fg='blue')
+        self.message('🏁 모든 데이터 수집 대장정 완료!', fg='blue')
+        self._send_slack("🏁 건축물대장 모든 데이터 수집 대장정 완료")
 
     def register_commands(self, cli_group):
         """CLI 그룹에 명령어 등록"""
@@ -209,7 +210,7 @@ class BuildingRawCommand(AbstractCommand):
             def _command(is_continue, is_renew):
                 self.sync_building_registers_by_township(service_obj, is_continue, is_renew)
 
-        # 6개 개별 커맨드 등록
+        # 9개 개별 커맨드 등록
         create_sync_command('building_raw:group_info', raw_facade.group_info_service, '총괄표제부 수집')
         create_sync_command('building_raw:title_info', raw_facade.title_info_service, '표제부 수집')
         create_sync_command('building_raw:basic_info', raw_facade.basic_info_service, '기본정보 수집')

@@ -47,7 +47,7 @@ class StructureBuildCommand(AbstractCommand):
                         if param_match:
                             return ast.literal_eval(param_match.group(1))
         except Exception as e:
-            command.message(f"⚠️ 로그 분석 오류: {e}", fg='yellow')
+            self.message(f"⚠️ 로그 분석 오류: {e}", fg='yellow')
         return None
 
     @staticmethod
@@ -79,6 +79,8 @@ class StructureBuildCommand(AbstractCommand):
         total_count = 0
         last_id = None
 
+        self._send_slack("🏗️ 공간정보 결합 빌드 프로세스 가동")
+
         if is_continue:
             renew_threshold = 30 if is_renew else 9999
             last_point = self._get_last_sync_point(service, 'build', renew_threshold)
@@ -86,44 +88,49 @@ class StructureBuildCommand(AbstractCommand):
                 from bson import ObjectId
                 try: last_id = ObjectId(last_point['_id'])
                 except: last_id = last_point['_id']
-                command.message(f"🔄 이어하기: {last_id}부터 시작", fg='magenta')
+                self.message(f"🔄 이어하기: {last_id}부터 시작", fg='magenta')
 
-        command.message("🏗️ [4-Core] 멀티프로세싱 공간정보 빌드를 시작합니다.", fg='green')
+        self.message("🏗️ [4-Core] 멀티프로세싱 공간정보 빌드를 시작합니다.", fg='green')
 
-        with Pool(processes=4) as pool:
-            while True:
-                query_params = {'page': 1, 'per_page': per_page, 'sort': [('_id', 1)]}
-                if last_id:
-                    query_params['_id'] = {'$gt': last_id}
+        try:
+            with Pool(processes=4) as pool:
+                while True:
+                    query_params = {'page': 1, 'per_page': per_page, 'sort': [('_id', 1)]}
+                    if last_id:
+                        query_params['_id'] = {'$gt': last_id}
 
-                address_pagination = service.get_list(query_params)
-                items = getattr(address_pagination, 'items', [])
+                    address_pagination = service.get_list(query_params)
+                    items = getattr(address_pagination, 'items', [])
 
-                if not items:
-                    command.message("✅ 빌드 완료", fg='blue')
-                    break
+                    if not items:
+                        self.message("✅ 빌드 완료", fg='blue')
+                        break
 
-                # 병렬 처리
-                results = pool.map(self._worker_build_task, items)
+                    # 병렬 처리
+                    results = pool.map(self._worker_build_task, items)
 
-                chunk_success_count = sum(1 for r in results if r['success'])
-                for r in results:
-                    if not r['success'] and r.get('error') != 'No bdMgtSn':
-                        command.message(f"❌ 에러 (ID: {r['id']}): {r['error']}", fg='red')
+                    chunk_success_count = sum(1 for r in results if r['success'])
+                    for r in results:
+                        if not r['success'] and r.get('error') != 'No bdMgtSn':
+                            self.message(f"❌ 에러 (ID: {r['id']}): {r['error']}", fg='red')
 
-                last_item = items[-1]
-                last_id = last_item['_id']
-                total_count += len(items)
+                    last_item = items[-1]
+                    last_id = last_item['_id']
+                    total_count += len(items)
 
-                command.message(
-                    f"  -> {total_count}건 처리 중... (성공: {chunk_success_count}/{len(items)}, ID: {last_id})",
-                    fg='white'
-                )
+                    self.message(
+                        f"  -> {total_count}건 처리 중... (성공: {chunk_success_count}/{len(items)}, ID: {last_id})",
+                        fg='white'
+                    )
 
-                if len(items) < per_page:
-                    break
+                    if len(items) < per_page:
+                        break
 
-        command.message(f"✨ 전체 작업 종료 (총 {total_count}건)", fg='blue', bg='white')
+            self.message(f"✨ 전체 작업 종료 (총 {total_count}건)", fg='blue', bg='white')
+            self._send_slack(f"✨ 빌드 완료 (총 {total_count}건 처리)")
+
+        except Exception as e:
+            self._handle_error(e, "공간정보 빌드 프로세스 중단")
 
     def register_commands(self, cli_group):
         @cli_group.command('address:build', help='수집된 주소 기반 공간정보 결합')
@@ -131,3 +138,5 @@ class StructureBuildCommand(AbstractCommand):
         @click.option('--renew', 'is_renew', is_flag=True)
         def build_address_cmd(is_continue, is_renew):
             self.handle(is_continue, is_renew)
+
+__all__=['StructureBuildCommand']

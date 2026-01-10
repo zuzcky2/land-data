@@ -5,7 +5,7 @@ from app.services.location.boundary.service import BoundaryService
 from app.services.location.raw.services.address_service import AddressService as RawAddressService
 from app.services.location.raw.services.continuous_geometry_service import ContinuousGeometryService
 from app.services.location.raw.services.point_geometry_service import PointGeometryService
-from app.services.building.structure.handlers.address_make_dto_handler import AddressDtoHandler
+from app.services.building.structure.handlers.address_dto_handler import AddressDtoHandler
 from app.services.building.structure.dtos.address_dto import AddressDto
 from typing import Optional, Dict, Any, List
 from app.core.helpers.log import Log

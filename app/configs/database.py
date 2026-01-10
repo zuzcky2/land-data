@@ -47,6 +47,12 @@ configs: dict = {
         'pool_recycle': 3600,
         'pool_pre_ping': True
     },
+
+    'redis': {
+        'connection': 'redis',
+        'host': Env.get('REDIS_HOST', 'localhost'),
+        'port': Env.get('REDIS_PORT', '6379'),
+    }
 }
 
 __all__ = ['configs']

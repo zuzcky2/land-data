@@ -5,7 +5,7 @@ from app.services.building.structure.drivers.abstract_mongodb_driver import Abst
 from app.services.building.structure.drivers.driver_interface import DriverInterface
 from app.facade import db
 
-class AddressMongodbDriver(AbstractMongodbDriver, DriverInterface):
+class ComplexMongodbDriver(AbstractMongodbDriver, DriverInterface):
 
     @property
     def primary_key(self) -> str:

@@ -1,52 +1,92 @@
-from apscheduler.schedulers.background import BlockingScheduler
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.jobstores.mongodb import MongoDBJobStore
+from apscheduler.executors.pool import ProcessPoolExecutor, ThreadPoolExecutor
+
 from app.core.helpers.log import Log
-from .command import Command
-from logging import Logger
+from app.core.packages.database.manager import Manager  # 매니저 타입 힌트용
+from typing import Dict, Any
 
 
 class Scheduler:
     """
-    작업 스케줄링을 관리하는 클래스입니다.
-    백그라운드 스케줄러를 사용하여 작업을 예약하고 로그를 관리합니다.
-
-    Attributes:
-        logger (Logger): 스케줄러 작업에 대한 로깅을 위한 Logger 인스턴스입니다.
-        runner (BlockingScheduler): 작업을 실행하는 APScheduler의 BlockingScheduler 인스턴스입니다.
+    Database Manager를 통해 MongoDB JobStore를 사용하는 스케줄러입니다.
     """
 
-    def __init__(self, command: Command):
+    def __init__(self, database_manager: Manager):
         """
-        Scheduler 클래스의 생성자로, 로깅 및 스케줄러 인스턴스를 초기화합니다.
-
         Args:
-            log (Log): 로그 설정을 관리하는 Log 객체입니다.
+            database_manager (Manager): 프레임워크의 DB 관리 인스턴스
         """
-        self.logger = command.logger
+        self.logger = Log.get_logger('scheduler')
+
+        # 1. 드라이버에서 클라이언트와 설정 정보 추출
+        # get_mongodb_driver가 MongoClient를 반환한다고 가정합니다.
+        self.mongo_client = database_manager.get_mongodb_driver('mongodb')
+        self.db_name = "landmark"
+        self.collection_name = "jobs"
+
         self.runner = self.create_instance()
 
     def create_instance(self) -> BlockingScheduler:
         """
-        BlockingScheduler 인스턴스를 생성하여 반환합니다.
-
-        Returns:
-            BlockingScheduler: 작업을 스케줄링할 BlockingScheduler 인스턴스입니다.
+        DB 매니저의 클라이언트를 주입하여 스케줄러 인스턴스를 생성합니다.
         """
-        return BlockingScheduler()
+        # 1. MongoDB JobStore 설정 (URI 대신 client 직접 전달)
+        jobstores = {
+            'default': MongoDBJobStore(
+                client=self.mongo_client,
+                database=self.db_name,
+                collection=self.collection_name
+            )
+        }
+
+        # 2. 실행기 설정 (4개 코어 프로세스 풀 포함)
+        executors = {
+            'default': ThreadPoolExecutor(20),
+            'processpool': ProcessPoolExecutor(max_workers=4)
+        }
+
+        # 3. 기본 실행 정책 설정
+        job_defaults = {
+            'coalesce': False,
+            'max_instances': 3,
+            'misfire_grace_time': 3600
+        }
+
+        return BlockingScheduler(
+            jobstores=jobstores,
+            executors=executors,
+            job_defaults=job_defaults,
+            timezone='Asia/Seoul'
+        )
 
     def start(self):
-        """
-        스케줄러를 시작하여 예약된 작업을 실행합니다.
-        """
-        self.logger.info("스케줄러가 시작되었습니다.")
-        self.runner.start()
+        """스케줄러 시작"""
+        try:
+            self.logger.info(f"MongoDB({self.db_name}.{self.collection_name}) 기반 스케줄러를 시작합니다.")
+            self.runner.start()
+        except (KeyboardInterrupt, SystemExit):
+            self.stop()
 
     def stop(self):
+        """스케줄러 중지"""
+        if self.runner.running:
+            self.logger.info("스케줄러를 안전하게 중지합니다.")
+            self.runner.shutdown()
+
+    def add_job(self, func, trigger, **kwargs):
         """
-        스케줄러를 중지하여 모든 예약된 작업을 멈춥니다.
+        작업 추가 메서드
+        ID가 지정되지 않으면 함수의 이름을 기본 ID로 사용합니다.
         """
-        self.logger.info("스케줄러가 중지되었습니다.")
-        self.runner.shutdown()
+        job_id = kwargs.get('id', func.__name__)
+        self.runner.add_job(
+            func,
+            trigger,
+            replace_existing=True,
+            **kwargs
+        )
+        self.logger.info(f"작업 예약 성공: {job_id}")
 
 
-# 외부로 노출할 클래스 목록을 정의합니다.
 __all__ = ['Scheduler']

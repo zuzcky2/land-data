@@ -6,7 +6,10 @@
 
 from .abstracts.abstract_container import AbstractContainer, providers
 from .modules.command import Command
+from .modules.queue import Queue
 from .modules.scheduler import Scheduler
+from app.core.packages.database.container import Container as DatabaseContainer
+from app.core.helpers.config import Config
 
 
 class Container(AbstractContainer):
@@ -16,17 +19,24 @@ class Container(AbstractContainer):
     - 주요 유틸 클래스들을 싱글톤으로 제공
     - 공통 기능들을 중앙 집중적으로 관리
     """
+    database_container: DatabaseContainer = providers.Container(DatabaseContainer)
 
     command: providers.Singleton[Command] = providers.Singleton(
         Command
     )
-    """명령어 실행 핸들러 (환경, 시간, 로거 주입)"""
 
     scheduler: providers.Singleton[Scheduler] = providers.Singleton(
-        Scheduler, command=command
+        Scheduler, database_manager=database_container.manager
     )
-    """작업 스케줄링 핸들러 (command 의존)"""
 
+    # ...
+    # Redis 설정을 가져와서 Queue 모듈에 주입
+    queue: providers.Singleton[Queue] = providers.Singleton(
+        Queue,
+        broker_url=f"redis://{Config.get('database.redis.host')}:{Config.get('database.redis.port')}/0",
+        # 🚀 URI를 여기서 만들지 말고 설정 딕셔너리를 통째로 넘깁니다.
+        mongo_cfg=Config.get('database.mongodb')
+    )
 
 # 외부에서 import 가능하도록 정의
 __all__ = ["Container"]

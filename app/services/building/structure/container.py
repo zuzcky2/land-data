@@ -1,6 +1,6 @@
 from app.core.packages.support.abstracts.abstract_container import AbstractContainer, providers
 from app.services.building.structure.drivers.address.address_mongodb_driver import AddressMongodbDriver
-from app.services.building.structure.handlers.address_make_dto_handler import AddressDtoHandler
+from app.services.building.structure.handlers.address_dto_handler import AddressDtoHandler
 from app.services.building.structure.managers.address_manager import AddressManager
 from app.services.building.structure.services.address_service import AddressService
 from app.services.location.raw.container import RawContainer

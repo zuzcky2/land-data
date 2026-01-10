@@ -52,6 +52,9 @@ configs: dict = {
     # 스케줄러 로깅 설정 (백그라운드 작업용)
     'scheduler': _create_logging_config('scheduler', 'scheduler.log'),
 
+    # 큐 로깅 설정 (백그라운드 작업용)
+    'queue': _create_logging_config('queue', 'queue.log'),
+
     # 커맨드 로깅 설정 (CLI 실행용)
     'command': _create_logging_config('command', 'command.log'),
 
@@ -62,6 +65,8 @@ configs: dict = {
     'api': _create_logging_config('api', 'api.log'),
 
     'mongodb': _create_logging_config('mongodb', 'mongodb.log'),
+
+    'slack': _create_logging_config('slack', 'slack.log'),
 
     'building_raw': _create_logging_config('building_raw', 'building_raw.log'),
     'building_raw_group_info': _create_logging_config('building_raw_group_info', 'building_raw/building_raw_group_info.log'),
