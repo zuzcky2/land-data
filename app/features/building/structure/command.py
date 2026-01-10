@@ -83,7 +83,7 @@ class StructureBuildCommand(AbstractCommand):
 
         if is_continue:
             renew_threshold = 30 if is_renew else 9999
-            last_point = self._get_last_sync_point(service, 'build', renew_threshold)
+            last_point = self._get_last_sync_point(structure_facade.address_service, 'build', renew_threshold)
             if last_point and '_id' in last_point:
                 from bson import ObjectId
                 try: last_id = ObjectId(last_point['_id'])
