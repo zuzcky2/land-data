@@ -18,27 +18,24 @@ class PointGeometryService(AbstractService):
         return self._manager
 
     def get_list_by_chain(self, params: Dict[str, Any]) -> Any:
-        """DB 목록 조회 -> 만료 검사 -> VWorld 주소 검색 -> PNU 매칭 -> 저장"""
         mongodb_driver = self.manager.driver(self.DRIVER_MONGODB)
         bd_mgt_sn = params.get('bd_mgt_sn')
 
-        # 1. 로컬 DB 조회
+        # 1. 로컬 DB 조회 (updated_at 인덱스 활용으로 이미 90일 필터링됨)
         pagination = mongodb_driver.clear().set_pagination(
             params['page'], params['per_page']).set_arguments({
             'bdMgtSn': bd_mgt_sn,
             'updated_at': params.get('updated_at')
         }).read()
 
-        # 2. 만료 체크 (첫 번째 아이템 기준 90일)
-        is_data_exists = getattr(pagination, 'items', [])
-        if is_data_exists and self.is_expired(pagination.items[0].get('_id'), 90):
-            pagination.items = []
+        items = getattr(pagination, 'items', [])
 
-        # 3. 데이터가 없을 경우 VWorld 주소 검색(Geocoding) 수행
-        if len(pagination.items) < 1:
+        # 2. 데이터가 없거나 만료된 경우만 VWorld 호출
+        # (is_expired 호출을 제거하고 쿼리 결과가 없으면 바로 VWorld 실행)
+        if not items:
             vworld_driver = self.manager.driver(self.DRIVER_VWORLD)
 
-            # BBOX와 쿼리로 좌표 검색
+            # API 호출 (이 구간이 1.2초 소요됨)
             vworld_pagination = vworld_driver.clear().set_arguments({
                 'query': params.get('query'),
                 'bbox': params.get('bbox')
@@ -46,18 +43,27 @@ class PointGeometryService(AbstractService):
 
             valid_items = []
             target_pnu = params.get('pnu')
+            target_road = params.get('road_full_address')
+            target_parcel = params.get('parcel_address')
 
             for item in getattr(vworld_pagination, 'items', []):
-                # 검색 결과 중 요청한 PNU와 일치하는 데이터만 선별
-                if (item.get('id') == target_pnu
-                        or item.get('address', {}).get('road') == params.get('road_full_address')
-                        or item.get('address', {}).get('parcel') == params.get('parcel_address')):
-                    point = item.get('point', {})
-                    x, y = point.get('x'), point.get('y')
+                addr = item.get('address', {})
+                # 매칭 조건 최적화
+                is_match = (
+                        item.get('id') == target_pnu or
+                        addr.get('road') == target_road or
+                        addr.get('parcel') == target_parcel
+                )
 
-                    # 중복 방지를 위한 고유 관리 ID 생성 (건물번호+좌표)
-                    item['bdMgtSn'] = bd_mgt_sn
-                    item['manage_id'] = f"{bd_mgt_sn}_{x}_{y}"
+                if is_match:
+                    pt = item.get('point', {})
+                    x, y = pt.get('x'), pt.get('y')
+
+                    # 데이터 구조 정리
+                    item.update({
+                        'bdMgtSn': bd_mgt_sn,
+                        'manage_id': f"{bd_mgt_sn}_{x}_{y}"
+                    })
                     valid_items.append(item)
 
             if valid_items:
