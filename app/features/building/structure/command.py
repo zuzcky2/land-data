@@ -80,7 +80,7 @@ class StructureBuildCommand(AbstractCommand):
     def handle(self, is_continue: bool = False, is_renew: bool = False):
         """address:build 명령어의 실제 구현부"""
         service = location_raw_facade.address_service
-        per_page = 1000
+        per_page = 10000
         total_count = 0
         last_id = None
 
