@@ -23,16 +23,34 @@ class AddressService(AbstractService):
         mongodb_driver = self.manager.driver(self.DRIVER_MONGODB)
         item = mongodb_driver.clear().set_arguments(params).read_one()
 
+        def store_search_queries(queries: list, origin: dict):
+            change = False
+
+            if not 'search_queries' in origin:
+                origin['search_queries'] = []
+                change = True
+
+            for query in queries:
+                query = query.strip()
+
+                if query not in origin['search_queries']:
+                    origin['search_queries'].append(query)
+                    change = True
+
+            if change:
+                mongodb_driver.store([origin])
+
         if not item:
             jgk_driver = self.manager.driver(self.DRIVER_JGK)
 
-            item = jgk_driver.clear().set_arguments(params).read_one()
+            item = (jgk_driver.clear()
+                .set_arguments(params)
+                .set_pagination(page=1, per_page=1)
+                .read_one())
 
-            if item:
-                mongodb_driver.store([item])
-                return item
+        store_search_queries(params['search_queries'], item)
 
-        return None
+        return item
 
     def sync_from_jgk(self, params: Dict[str, Any], source: str = 'group') -> Dict[str, Any]:
         # 소스별로 다른 로거 사용 (building_raw_group, building_raw_title)
@@ -40,16 +58,12 @@ class AddressService(AbstractService):
         current_logger.info(f"Sync Start: {params}")
 
         try:
-            item = (
-                self.manager.driver(self.DRIVER_JGK)
-                .clear()
-                .set_arguments(params)
-                .set_pagination(page=1, per_page=1)
-                .read_one()
-            )
+            item = self.get_detail_by_chain({
+                'search_queries': params.get('search_queries'),
+                'updated_at': params.get('updated_at')
+            })
 
             if item:
-                self.manager.driver(self.DRIVER_MONGODB).store([item])
                 return {'status': 'success', 'bdMgtSn': item.get('bdMgtSn')}
             else:
                 return {'status': 'fail', 'dead': True}

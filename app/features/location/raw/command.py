@@ -13,7 +13,7 @@ from app.services.building.raw import facade as building_facade
 from app.features.contracts.command import AbstractCommand
 from app.core.helpers.log import Log
 
-class LocationAddressCommand(AbstractCommand):
+class LocationRawCommand(AbstractCommand):
 
     def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 30) -> Optional[dict]:
         """로그 파일 분석을 통해 소스 타입별 마지막 처리 지점을 반환합니다."""
@@ -82,10 +82,18 @@ class LocationAddressCommand(AbstractCommand):
 
             self.message(f"🚀 {msg_prefix} 기반 주소 마스터 수집을 시작합니다.", fg='green')
 
+            # 수정된지 30일 지난것들만 작업
+            now =  datetime.now()
+            role_date = now - timedelta(days=90)
             while True:
                 query_params = {
                     'page': 1,
                     'per_page': per_page,
+                    '$or': [
+                        {'updated_at': {'lt': role_date}},
+                        {'bdMgtSn': {'$exists': False}},
+                    ],
+                    'dead': {'$ne': True},
                     'sort': [('_id', 1)]
                 }
 
@@ -96,6 +104,7 @@ class LocationAddressCommand(AbstractCommand):
                     query_params['bun'] = {'$ne': '0000'}
 
                 pagination = building_service.get_list(query_params, driver_name='mongodb')
+
                 items = pagination.items or []
 
                 if not items:
@@ -109,27 +118,26 @@ class LocationAddressCommand(AbstractCommand):
                             last_id = item['_id']
                             continue
 
+
+                        search_queries = [item.get('newPlatPlc'), item.get('platPlc')]
+                        search_queries = [q for q in search_queries if q]
+
                         sync_params = {
                             '_id': str(item['_id']),
-                            'block_address': item.get('platPlc'),
-                            'road_address': item.get('newPlatPlc'),
+                            'search_queries': {'$in': search_queries},
+                            'updated_at': {'$gt': role_date},
                             'mgmBldrgstPk': item.get('mgmBldrgstPk'),
                             'bldNm': item.get('bldNm')
                         }
 
                         result = service.sync_from_jgk(sync_params, source=source_type)
 
-                        update_data = {}
                         if result.get('status') == 'success' and result.get('bdMgtSn'):
-                            update_data['bdMgtSn'] = result['bdMgtSn']
+                            item['bdMgtSn'] = result['bdMgtSn']
                         elif result.get('status') == 'fail' and result.get('dead'):
-                            update_data['dead'] = True
+                            item['dead'] = True
 
-                        if update_data:
-                            building_service.manager.driver('mongodb').collection.update_one(
-                                {'_id': item['_id']},
-                                {'$set': update_data}
-                            )
+                        building_service.manager.driver('mongodb').store([item])
 
                         last_id = item['_id']
                         total_count += 1
@@ -144,8 +152,6 @@ class LocationAddressCommand(AbstractCommand):
 
                 if len(items) < per_page:
                     break
-
-                time.sleep(0.05)
 
             self._send_slack(f"✅ {msg_prefix} 완료 (총 {total_count}건)")
 
@@ -185,4 +191,4 @@ class LocationAddressCommand(AbstractCommand):
         def sync_all_cmd(is_continue, is_renew):
             self.handle_sync_all(is_continue, is_renew)
 
-__all__ = ['LocationAddressCommand']
+__all__ = ['LocationRawCommand']

@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from multiprocessing import Pool
 
 from app.facade import command
-from app.services.location.raw import facade as address_facade
+from app.services.location.raw import facade as location_raw_facade
 from app.services.building.structure import facade as structure_facade
 from app.services.location.raw.services.address_service import AddressService
 from app.features.contracts.command import AbstractCommand
@@ -63,7 +63,12 @@ class StructureBuildCommand(AbstractCommand):
                 return {'success': False, 'id': item.get('_id'), 'error': 'No bdMgtSn'}
 
             # 실제 빌드 서비스 호출
-            structure_facade.address_service.build_by_address_raw(item)
+            result = structure_facade.address_service.build_by_address_raw(item)
+
+            item['address_id'] = result.building_manage_number if result else None
+            item['dead'] = False if result else True
+
+            location_raw_facade.address_service.manager.driver('mongodb').store([item])
 
             # 개별 성공 로그 기록 (프로세스별 독립 로그)
             build_logger.info(f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{bd_mgt_sn}'}}")
@@ -74,7 +79,7 @@ class StructureBuildCommand(AbstractCommand):
 
     def handle(self, is_continue: bool = False, is_renew: bool = False):
         """address:build 명령어의 실제 구현부"""
-        service = address_facade.address_service
+        service = location_raw_facade.address_service
         per_page = 1000
         total_count = 0
         last_id = None
@@ -92,14 +97,27 @@ class StructureBuildCommand(AbstractCommand):
 
         self.message("🏗️ [4-Core] 멀티프로세싱 공간정보 빌드를 시작합니다.", fg='green')
 
+        # 수정된지 30일 지난것들만 작업
+        now = datetime.now()
+        role_date = now - timedelta(days=90)
         try:
             with Pool(processes=4) as pool:
                 while True:
-                    query_params = {'page': 1, 'per_page': per_page, 'sort': [('_id', 1)]}
+                    query_params = {
+                        '$or': [
+                            {'updated_at': {'lt': role_date}},
+                            {'address_id': {'$exists': False}},
+                        ],
+                        'dead': {'$ne': True},
+                        'page': 1,
+                        'per_page': per_page,
+                        'sort': [('_id', 1)]
+                    }
                     if last_id:
                         query_params['_id'] = {'$gt': last_id}
 
                     address_pagination = service.get_list(query_params)
+
                     items = getattr(address_pagination, 'items', [])
 
                     if not items:

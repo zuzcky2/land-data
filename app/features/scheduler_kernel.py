@@ -62,7 +62,7 @@ def job_building_raw_sync():
 
 def job_location_address_sync():
     """주소 마스터 동기화 래퍼"""
-    from app.features.location.address.command import LocationAddressCommand
+    from app.features.location.raw.command import LocationAddressCommand
     execute_job(LocationAddressCommand().handle_sync_all, "총괄, 표제부 기반 주소 동기화", is_continue=True, is_renew=True)
 
 def job_building_structure_build():

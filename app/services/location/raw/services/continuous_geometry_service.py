@@ -25,8 +25,12 @@ class ContinuousGeometryService(AbstractService):
 
         # 1. 기존 데이터 조회 (ID가 있을 경우)
         target_id = params.get('id')
+
         if target_id:
-            item = mongodb_driver.clear().set_arguments({'id': target_id}).read_one()
+            item = mongodb_driver.clear().set_arguments({
+                'id': target_id,
+                'updated_at': params.get('updated_at'),
+            }).read_one()
 
         # 2. 데이터 유효성 검사 (만료 여부 확인: 90일)
         if item and self.is_expired(item.get('_id'), 90):

@@ -3,6 +3,7 @@ from app.services.contracts.drivers.abstract import AbstractDriver
 from typing import Any, List, Optional, Tuple, Union
 from pymongo import UpdateOne, ASCENDING, DESCENDING
 from pymongo.collection import Collection
+from datetime import datetime
 
 
 class AbstractMongodbDriver(AbstractDriver, ABC):
@@ -81,19 +82,35 @@ class AbstractMongodbDriver(AbstractDriver, ABC):
         if not items:
             return None
 
+        now = datetime.now()
         operations = []
+
         for item in items:
+            # 1. 타입 변환 처리
             for key, set_type in self.convert_types.items():
                 if key in item and item[key] is not None:
                     item[key] = set_type(item[key])
 
+            # 2. PK 체크
             pk = item.get(self.primary_key)
             if not pk:
                 continue
 
+            # 3. 자동 타임스탬프 설정
+            # 업데이트 시 항상 현재 시간으로 변경
+            item['updated_at'] = now
+
+            # Upsert를 위한 쿼리와 업데이트 내용 분리
+            filter_query = {self.primary_key: pk}
+
             operations.append(UpdateOne(
-                {self.primary_key: pk},
-                {'$set': item},
+                filter_query,
+                {
+                    '$set': item,  # 매번 업데이트
+                    '$setOnInsert': {  # 문서가 처음 생성(Insert)될 때만 적용
+                        'created_at': now
+                    }
+                },
                 upsert=True
             ))
 

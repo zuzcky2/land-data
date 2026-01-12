@@ -157,7 +157,6 @@ class BuildingRawCommand(AbstractCommand):
                 break
 
             current_page += 1
-            time.sleep(0.1)
 
     def handle_sync_all(self, is_continue: bool, is_renew: bool):
         """

@@ -24,7 +24,10 @@ class PointGeometryService(AbstractService):
 
         # 1. 로컬 DB 조회
         pagination = mongodb_driver.clear().set_pagination(
-            params['page'], params['per_page']).set_arguments({'bdMgtSn': bd_mgt_sn}).read()
+            params['page'], params['per_page']).set_arguments({
+            'bdMgtSn': bd_mgt_sn,
+            'updated_at': params.get('updated_at')
+        }).read()
 
         # 2. 만료 체크 (첫 번째 아이템 기준 90일)
         is_data_exists = getattr(pagination, 'items', [])

@@ -21,14 +21,14 @@ def get_command_list() -> List[Any]:
         # 각 서비스의 명령어 클래스 동적 로드
         from app.features.location.boundary.command import BoundaryCommand
         from app.features.building.raw.command import BuildingRawCommand
-        from app.features.location.address.command import LocationAddressCommand
+        from app.features.location.raw.command import LocationRawCommand
         from app.features.building.structure.command import StructureBuildCommand
 
         # 현재 등록된 명령어 클래스 인스턴스 리스트
         command_classes = [
             BoundaryCommand(),              # 지역 경계 데이터 관련
             BuildingRawCommand(),           # 건축물 원본 데이터 관련
-            LocationAddressCommand(),       # 주소 마스터 동기화 관련
+            LocationRawCommand(),       # 주소 마스터 동기화 관련
             StructureBuildCommand()         # 공간정보 빌드 관련
         ]
 

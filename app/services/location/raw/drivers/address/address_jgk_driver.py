@@ -14,22 +14,12 @@ class AddressJgkDriver(AbstractJgkDriver, DriverInterface):
 
         # 1. 검색 키워드 후보군 정리 (공백 제거 및 필터링)
         # 우선순위: road_address -> block_address
-        keywords = [
-            params.get('road_address', '').strip(),
-            params.get('block_address', '').strip()
-        ]
-
-        # 유효한(비어있지 않은) 키워드만 남김
-        valid_keywords = [k for k in keywords if k]
-
-        if not valid_keywords:
-            return []
 
         if single:
             self.set_pagination(page=1, per_page=1)
 
         # 2. 순차적 검색 실행
-        for keyword in valid_keywords:
+        for keyword in params.get('search_queries'):
             # API 호출
             res = self._call_api({'keyword': keyword})
             self._last_raw_response = res
