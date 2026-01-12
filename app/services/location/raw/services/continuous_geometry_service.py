@@ -19,36 +19,32 @@ class ContinuousGeometryService(AbstractService):
         return self._manager
 
     def get_detail_by_chain(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """DB 조회 -> 만료 검사 -> VWorld 수집 -> 저장 파이프라인"""
         mongodb_driver = self.manager.driver(self.DRIVER_MONGODB)
         item = None
-
-        # 1. 기존 데이터 조회 (ID가 있을 경우)
         target_id = params.get('id')
 
+        # 1. 기존 데이터 조회 (ID가 있을 경우)
+        # updated_at 필터를 쿼리에 포함하여 is_expired 호출 생략
         if target_id:
             item = mongodb_driver.clear().set_arguments({
                 'id': target_id,
-                'updated_at': params.get('updated_at'),
+                'updated_at': params.get('updated_at'),  # 90일 조건 포함
             }).read_one()
 
-        # 2. 데이터 유효성 검사 (만료 여부 확인: 90일)
-        if item and self.is_expired(item.get('_id'), 90):
-            item = None
-
-        # 3. 데이터가 없거나 만료된 경우 VWorld에서 새로 수집
+        # 2. 데이터가 없으면 VWorld 수집
         if not item:
-            vworld_driver = self.manager.driver(self.DRIVER_VWORLD)
+            # 💡 [성능 팁] 여기서 잠깐!
+            # 만약 좌표(lat, lon)로 이미 저장된 데이터가 있는지 먼저 확인하면 API 호출을 더 줄일 수 있습니다.
 
-            # VWorld API 호출 (좌표 기반 지적 정보 조회)
+            vworld_driver = self.manager.driver(self.DRIVER_VWORLD)
             item = vworld_driver.clear().set_arguments({
                 'latitude': params.get('latitude'),
                 'longitude': params.get('longitude'),
             }).read_one()
 
             if item:
-                # 메타데이터 보강 및 저장
                 item['bdMgtSn'] = params.get('bdMgtSn')
+                # 🚀 store 시 manage_id 등을 활용해 중복 Insert 방지 확인 필요
                 mongodb_driver.store([item])
 
         return item
