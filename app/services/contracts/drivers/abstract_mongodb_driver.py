@@ -96,9 +96,14 @@ class AbstractMongodbDriver(AbstractDriver, ABC):
             if not pk:
                 continue
 
-            # 3. 자동 타임스탬프 설정
-            # 업데이트 시 항상 현재 시간으로 변경
-            item['updated_at'] = now
+            # 3. 🚀 핵심: 전처리
+            # 들어온 데이터에 혹시 created_at이 있다면 제거합니다.
+            # (이유: 업데이트 시 기존 DB에 있는 진짜 생성 날짜를 지키기 위해)
+            update_data = item.copy()
+            update_data.pop('created_at', None)
+
+            # updated_at은 언제나 현재 시간
+            update_data['updated_at'] = now
 
             # Upsert를 위한 쿼리와 업데이트 내용 분리
             filter_query = {self.primary_key: pk}
@@ -106,7 +111,7 @@ class AbstractMongodbDriver(AbstractDriver, ABC):
             operations.append(UpdateOne(
                 filter_query,
                 {
-                    '$set': item,  # 매번 업데이트
+                    '$set': update_data,  # 매번 업데이트
                     '$setOnInsert': {  # 문서가 처음 생성(Insert)될 때만 적용
                         'created_at': now
                     }
