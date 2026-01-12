@@ -44,11 +44,11 @@ class AddressService(AbstractService):
             jgk_driver = self.manager.driver(self.DRIVER_JGK)
 
             item = (jgk_driver.clear()
-                .set_arguments(params)
+                .set_arguments({'search_queries': params.get('search_queries')['$in'],})
                 .set_pagination(page=1, per_page=1)
                 .read_one())
 
-        store_search_queries(params['search_queries'], item)
+        store_search_queries(params['search_queries']['$in'], item)
 
         return item
 

@@ -92,6 +92,7 @@ class LocationRawCommand(AbstractCommand):
                     '$or': [
                         {'updated_at': {'lt': role_date}},
                         {'bdMgtSn': {'$exists': False}},
+                        {'bdMgtSn': None},
                     ],
                     'dead': {'$ne': True},
                     'sort': [('_id', 1)]
