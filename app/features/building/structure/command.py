@@ -53,29 +53,52 @@ class StructureBuildCommand(AbstractCommand):
     @staticmethod
     def _worker_build_task(item: Dict[str, Any]) -> Dict[str, Any]:
         """각 코어에서 독립적으로 실행될 빌드 태스크"""
+        # 에러 추적을 위한 초기화
+        current_id = item.get('_id') if item else 'Unknown'
+
         try:
+            # item 자체가 None이거나 dict가 아닌 경우 방어
+            if item is None:
+                return {'success': False, 'id': 'None', 'error': 'Item is None'}
+
             from app.services.building.structure import facade as structure_facade
             logger_name = f"{structure_facade.address_service.logger_name}_build"
             build_logger = Log.get_logger(logger_name)
 
             bd_mgt_sn = item.get('bdMgtSn')
             if not bd_mgt_sn:
-                return {'success': False, 'id': item.get('_id'), 'error': 'No bdMgtSn'}
+                return {'success': False, 'id': current_id, 'error': 'No bdMgtSn'}
 
             # 실제 빌드 서비스 호출
             result = structure_facade.address_service.build_by_address_raw(item)
 
-            item['address_id'] = result.building_manage_number if result else None
-            item['dead'] = False if result else True
+            # 🚀 [수정 지점] result가 객체인지, 아니면 딕셔너리인지에 따라 안전하게 접근
+            # 만약 result가 None이면 'NoneType' 에러 방지를 위해 방어 로직 강화
+            if result:
+                # result가 객체라면 getattr 사용, dict라면 .get() 사용
+                address_id = getattr(result, 'building_manage_number', None)
+                if address_id is None and isinstance(result, dict):
+                    address_id = result.get('building_manage_number')
 
-            location_raw_facade.address_service.manager.driver('mongodb').store([item])
+                item['address_id'] = address_id
+                item['dead'] = False
+            else:
+                item['address_id'] = None
+                item['dead'] = True
 
-            # 개별 성공 로그 기록 (프로세스별 독립 로그)
-            build_logger.info(f"Sync Start: {{'_id': '{str(item['_id'])}', 'bdMgtSn': '{bd_mgt_sn}'}}")
+            if location_raw_facade and location_raw_facade.address_service:
+                location_raw_facade.address_service.manager.driver('mongodb').store([item])
+            else:
+                return {'success': False, 'id': current_id, 'error': 'Location service facade is None'}
 
-            return {'success': True, 'id': item.get('_id')}
+            build_logger.info(f"Sync Start: {{'_id': '{str(current_id)}', 'bdMgtSn': '{bd_mgt_sn}'}}")
+            return {'success': True, 'id': current_id}
+
         except Exception as e:
-            return {'success': False, 'id': item.get('_id'), 'error': str(e)}
+            # 🚀 상세 에러 추적을 위해 에러 타입과 메시지를 함께 반환
+            import traceback
+            error_detail = f"{str(e)}\n{traceback.format_exc()}"
+            return {'success': False, 'id': current_id, 'error': error_detail}
 
     def handle(self, is_continue: bool = False, is_renew: bool = False):
         """address:build 명령어의 실제 구현부"""

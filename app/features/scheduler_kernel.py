@@ -62,21 +62,13 @@ def job_building_raw_sync():
 
 def job_location_address_sync():
     """주소 마스터 동기화 래퍼"""
-    from app.features.location.raw.command import LocationAddressCommand
-    execute_job(LocationAddressCommand().handle_sync_all, "총괄, 표제부 기반 주소 동기화", is_continue=True, is_renew=True)
+    from app.features.location.raw.command import LocationRawCommand
+    execute_job(LocationRawCommand().handle_sync_all, "총괄, 표제부 기반 주소 동기화", is_continue=True, is_renew=True)
 
 def job_building_structure_build():
     """공간정보 빌드 래퍼"""
     from app.features.building.structure.command import StructureBuildCommand
     execute_job(StructureBuildCommand().handle, "주소 기반 좌표 및 지적도 결합 빌드", is_continue=True, is_renew=True)
-
-def job_heartbeat_test():
-    """스케줄러 동작 테스트용 래퍼"""
-    now_str = datetime.datetime.now(KST_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
-    msg = f"🔔 [Scheduler Test] 현재 시간: {now_str}"
-    logger.info(msg)
-    webhook_facade.slack_service.send_message('scheduler', [msg])
-
 
 @dataclass
 class ScheduleConfig:
@@ -176,15 +168,6 @@ class SchedulerRegistry:
             job_id='building_structure_address_build',
             name='주소 기반 좌표 및 지적도 결합 빌드',
             environments=['development', 'production']
-        ))
-
-        self.register(ScheduleConfig(
-            func=job_heartbeat_test,
-            trigger='cron',
-            minute='*/30',
-            job_id='scheduler_heartbeat_test',
-            name='스케줄러 동작 테스트',
-            environments=['local', 'development', 'production']
         ))
 
 

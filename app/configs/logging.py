@@ -81,6 +81,7 @@ configs: dict = {
 
     'location_raw_address_group': _create_logging_config('location_raw_address_group', 'location_raw/address_group.log'),
     'location_raw_address_title': _create_logging_config('location_raw_address_title', 'location_raw/address_title.log'),
+    'building_structure_address': _create_logging_config('building_structure_address', 'building_structure/address_service.log'),
     'building_structure_address_build': _create_logging_config('building_structure_address_build', 'building_structure/address_build.log'),
 }
 

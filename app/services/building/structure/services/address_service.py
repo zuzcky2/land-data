@@ -71,8 +71,17 @@ class AddressService(AbstractService):
                 # 1. 행정구역 정보 및 BBOX 확보
                 state_boundary = self._get_cache_boundary(bd_mgt_sn[:2], 'state')
                 district_boundary = self._get_cache_boundary(bd_mgt_sn[:5], 'district')
-                township_boundary = self._get_cache_boundary(bd_mgt_sn[:8], 'township')
-                village_boundary = self._get_cache_boundary(bd_mgt_sn[:10], 'village')
+                if not district_boundary:
+                    legal_code = bd_mgt_sn.replace(bd_mgt_sn[:5], address_raw.get('admCd')[:5])
+                    district_boundary = self._get_cache_boundary(legal_code[:5], 'district')
+                    township_boundary = self._get_cache_boundary(legal_code[:8], 'township')
+                    village_boundary = self._get_cache_boundary(legal_code[:10], 'village')
+                else:
+                    township_boundary = self._get_cache_boundary(bd_mgt_sn[:8], 'township')
+                    village_boundary = self._get_cache_boundary(bd_mgt_sn[:10], 'village')
+
+                if not state_boundary or not district_boundary or not township_boundary:
+                    return None
 
                 bbox = district_boundary.bbox if district_boundary else None
 
@@ -84,7 +93,6 @@ class AddressService(AbstractService):
                 parcel_unit_addresses = [address_raw.get('lnbrMnnm')]
                 if address_raw.get('lnbrSlno'):
                     parcel_unit_addresses.append(address_raw.get('lnbrSlno'))
-
 
                 # 3. 좌표(Point) 수집
                 point_pagination = self._raw_point_geometry_service.get_list_by_chain({
