@@ -21,7 +21,7 @@ class PointGeometryService(AbstractService):
         mongodb_driver = self.manager.driver(self.DRIVER_MONGODB)
         bd_mgt_sn = params.get('bd_mgt_sn')
 
-        # 1. 로컬 DB 조회 (updated_at 인덱스 활용으로 이미 90일 필터링됨)
+        # 1. 로컬 DB 조회 (updated_at 인덱스 활용으로 이미 7일 필터링됨)
         pagination = mongodb_driver.clear().set_pagination(
             params['page'], params['per_page']).set_arguments({
             'bdMgtSn': bd_mgt_sn,

@@ -1,152 +1,87 @@
-from typing import Dict, Any, List, Optional, Tuple
-from shapely.geometry import shape, mapping, Point
-from shapely.ops import unary_union
+from typing import Optional, Dict, Any
+from datetime import datetime
 from app.services.building.structure.dtos.address_dto import AddressDto
 from app.services.building.structure.dtos.complex_dto import ComplexDto
 
 
 class ComplexDtoHandler:
 
-    def handle(self,
-        address_dto: AddressDto,
-        complex_type: str,
-        building: dict) -> ComplexDto:
-
-        bd_mgt_sn = address_raw.get('bdMgtSn')
-
-        # 1. 폴리곤 병합 및 중앙점 추출 (데이터 없으면 None 반환)
-        merged_geometry, center_pt = self._process_geometries(continuous_items)
-
-        # 2. 행정구역 명칭 및 짧은 명칭 설정
-        full_state = state_boundary.item_name
-        short_state = state_boundary.short_name
-        display_boundary_address = village_boundary.item_full_name if village_boundary else township_boundary.item_full_name
-
-        # 3. 관련 지번(Related Blocks) 가공
-        processed_related_blocks = self._process_related_blocks(
-            address_raw.get('relJibun', []),
-            full_state,
-            district_boundary.item_name,
-            township_boundary.item_name
-        )
-
-        # 4. 도로명/지번 본부번 결합 (예: 123-0 -> 123)
-        road_suffix = self._combine_num(address_raw.get('buldMnnm'), address_raw.get('buldSlno'))
-        block_suffix = self._combine_num(address_raw.get('lnbrMnnm'), address_raw.get('lnbrSlno'))
-
-        # 5. DTO 생성 및 반환
-        return AddressDto(
-            building_manage_number=bd_mgt_sn,
-            pnu=bd_mgt_sn[:19],
-
-            # 행정구역 매핑
-            state=state_boundary.item_code,
-            state_name=full_state,
-            state_short_name=short_state,
-            district=district_boundary.item_code,
-            district_name=district_boundary.item_name,
-            township=township_boundary.item_code,
-            township_name=township_boundary.item_name,
-            village=village_boundary.item_code if village_boundary else None,
-            village_name=village_boundary.item_name if village_boundary else None,
-
-            township_admin=address_raw.get('admCd'),
-            township_admin_name=address_raw.get('hemdNm'),
-            zip_code=address_raw.get('zipNo'),
-            is_current=address_raw.get('hstryYn') == '0',
-
-            display_boundary_address=display_boundary_address,
-            display_boundary_short_address=display_boundary_address.replace(full_state, short_state),
-
-            # --- 지번 주소 상세 ---
-            is_mountain=address_raw.get('mtYn') == '1',
-            block_main=self._to_int(address_raw.get('lnbrMnnm')),
-            block_sub=self._to_int(address_raw.get('lnbrSlno')),
-            display_block=f"{address_raw.get('emdNm', '')} {block_suffix}".strip(),
-            display_block_address=address_raw.get('jibunAddr'),
-            display_block_short_address=address_raw.get('jibunAddr', '').replace(full_state, short_state),
-            related_blocks=processed_related_blocks,
-
-            # --- 도로명 주소 상세 ---
-            road_name_code=address_raw.get('rnMgtSn'),
-            road_name=address_raw.get('rn'),
-            road_main=self._to_int(address_raw.get('buldMnnm')),
-            road_sub=self._to_int(address_raw.get('buldSlno')),
-            display_road=f"{address_raw.get('rn', '')} {road_suffix}".strip(),
-            display_road_address=address_raw.get('roadAddrPart1'),
-            display_road_short_address=address_raw.get('roadAddrPart1', '').replace(full_state, short_state),
-            display_road_include_address=address_raw.get('roadAddr'),
-            display_road_include_short_address=address_raw.get('roadAddr').replace(full_state, short_state),
-
-            # --- 🚀 위치 및 공간 정보 (데이터 없으면 null) ---
-            latitude=float(center_pt.y) if center_pt else None,
-            longitude=float(center_pt.x) if center_pt else None,
-            geo_point={
-                "type": "Point",
-                "coordinates": [float(center_pt.x), float(center_pt.y)]
-            } if center_pt else None,
-            geometry=merged_geometry,
-        )
-
-    def _process_geometries(self, continuous_items: List[Dict]) -> Tuple[Optional[Dict], Optional[Point]]:
-        """폴리곤 병합 및 중앙점(Centroid) 계산"""
-        if not continuous_items:
-            return None, None
-
-        valid_shapes = []
-        for item in continuous_items:
-            geom = item.get('geometry')
-            if not geom: continue
-            try:
-                s = shape(geom)
-                if not s.is_valid:
-                    s = s.buffer(0)
-                valid_shapes.append(s)
-            except:
-                continue
-
-        if not valid_shapes:
-            return None, None
-
-        try:
-            merged_shape = unary_union(valid_shapes)
-            return mapping(merged_shape), merged_shape.centroid
-        except:
-            first_shape = valid_shapes[0]
-            return mapping(first_shape), first_shape.centroid
-
-    def _process_related_blocks(self, rel_jibun: Any, state_name: str, district_name: str, township_name: str) -> List[str]:
-        """관련 지번 리스트 가공 로직"""
-        if not rel_jibun:
-            return []
-
-        # 문자열로 들어올 경우 리스트화
-        blocks = rel_jibun.split(',') if isinstance(rel_jibun, str) else rel_jibun
-
-        results = []
-        for b in blocks:
-            clean_b = b.strip()
-            if not clean_b: continue
-
-            parts = []
-            if state_name not in clean_b: parts.append(state_name)
-            if district_name not in clean_b: parts.append(district_name)
-            if district_name not in clean_b: parts.append(township_name)
-            parts.append(clean_b)
-            results.append(' '.join(parts))
-        return results
-
-    def _combine_num(self, main: Any, sub: Any) -> str:
-        """본번-부번 결합 (예: 123, 0 -> 123 / 123, 1 -> 123-1)"""
-        m = str(main or '').strip()
-        s = str(sub or '').strip()
-        if not m: return ""
-        return m if not s or s == '0' else f"{m}-{s}"
-
-    def _to_int(self, value: Any) -> Optional[int]:
-        try:
-            if value is None: return None
-            v = str(value).strip()
-            return int(v) if v.isdigit() else None
-        except:
+    def handle(self, address_dto: AddressDto, complex_type: str, raw_data: Dict[str, Any]) -> Optional[ComplexDto]:
+        if not raw_data:
             return None
+
+        # 1. 날짜 정보 전처리
+        permit_date = self._parse_date(raw_data.get('pmsDay'))
+        construction_date = self._parse_date(raw_data.get('stcnsDay'))
+        approval_date = self._parse_date(raw_data.get('useAprDay'))
+        display_date, display_date_name = self._get_display_date(approval_date, construction_date, permit_date)
+
+        # 2. 주차 정보 전처리 (옥내/옥외 합산)
+        indoor_parking = int(raw_data.get('indrAutoUtcnt') or 0) + int(raw_data.get('indrMechUtcnt') or 0)
+        outdoor_parking = int(raw_data.get('oudrAutoUtcnt') or 0) + int(raw_data.get('oudrMechUtcnt') or 0)
+
+        # [추가] etcPurps 가공 로직
+        raw_etc_purpose = raw_data.get('etcPurps', '')
+        purpose_list = []
+        if raw_etc_purpose and str(raw_etc_purpose).strip():
+            # 콤마로 분리 -> 양쪽 공백 제거 -> 빈 문자열 제외 -> 리스트 생성
+            purpose_list = [p.strip() for p in str(raw_etc_purpose).split(',') if p.strip()]
+
+        # 3. DTO 생성 (ComplexDto 필드만 사용)
+        return ComplexDto(
+            building_manage_number=address_dto.building_manage_number,
+            address_id=address_dto.id,  # address_dto의 _id 필드 매핑
+            item_name=raw_data.get('bldNm', '').strip() or address_dto.building_name,
+            register_kind_code=raw_data.get('regstrKindCdNm', ''),
+
+            # 규모 및 면적
+            land_area=float(raw_data.get('platArea') or 0),
+            building_area=float(raw_data.get('archArea') or 0),
+            total_floor_area=float(raw_data.get('totArea') or 0),
+            building_coverage_ratio=float(raw_data.get('bcRat') or 0),
+            floor_area_ratio=float(raw_data.get('vlRat') or 0),
+            main_building_count=int(raw_data.get('mainBldCnt') or 1),
+            annex_building_count=int(raw_data.get('atchBldCnt') or 0),
+
+            # 세대 및 가구
+            household_count=int(raw_data.get('hhldCnt') or 0),
+            family_count=int(raw_data.get('fmlyCnt') or 0),
+            unit_count=int(raw_data.get('hoCnt') or 0),
+            display_count=int(raw_data.get('hhldCnt') or raw_data.get('fmlyCnt') or raw_data.get('hoCnt') or 0),
+
+            # 주차 정보
+            total_parking_count=int(raw_data.get('totPkngCnt') or 0),
+            indoor_parking_count=indoor_parking,
+            outdoor_parking_count=outdoor_parking,
+
+            # 주요 용도
+            main_purpose_name=raw_data.get('mainPurpsCdNm'),
+            etc_purpose_name=purpose_list,
+
+            # 날짜 정보
+            permit_date=permit_date,
+            construction_date=construction_date,
+            approval_date=approval_date,
+            display_date_name=display_date_name,
+            display_date=display_date,
+
+            # 인허가 정보
+            permit_authority=raw_data.get('pmsnoKikCdNm'),
+            permit_year=self._parse_date(raw_data.get('pmsnoYear'), "%Y") if str(
+                raw_data.get('pmsnoYear')).strip() else None
+        )
+
+    def _parse_date(self, date_str: Any, date_format: str = "%Y%m%d") -> Optional[datetime]:
+        if not date_str or str(date_str).strip() in ['', '0', 'None']:
+            return None
+        try:
+            return datetime.strptime(str(date_str).strip(), date_format)
+        except ValueError:
+            return None
+
+    def _get_display_date(self, approval: Optional[datetime], construction: Optional[datetime],
+                          permit: Optional[datetime]):
+        if approval: return approval, "사용승인일"
+        if construction: return construction, "착공일"
+        if permit: return permit, "허가일"
+        return None, None

@@ -62,7 +62,7 @@ class AddressService(AbstractService):
         start_all = time.time()
 
         now = datetime.now()
-        role_date = now - timedelta(days=90)
+        role_date = now - timedelta(days=7)
 
         # 1. 기존 데이터 확인 구간
         t_start_read = time.time()

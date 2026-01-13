@@ -28,7 +28,7 @@ class ContinuousGeometryService(AbstractService):
         if target_id:
             item = mongodb_driver.clear().set_arguments({
                 'id': target_id,
-                'updated_at': params.get('updated_at'),  # 90일 조건 포함
+                'updated_at': params.get('updated_at'),  # 7일 조건 포함
             }).read_one()
 
         # 2. 데이터가 없으면 VWorld 수집

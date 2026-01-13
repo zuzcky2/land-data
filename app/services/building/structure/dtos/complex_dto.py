@@ -34,7 +34,7 @@ class ComplexDto(MongoModel):
 
     # 주요 용도
     main_purpose_name: Optional[str] = Field(None, title='건축물대장상 공식 주용도')
-    etc_purpose_name: Optional[str] = Field(None, title='주용도 외 세부 용도 기록')
+    etc_purpose_name: list = Field([], title='주용도 외 세부 용도 기록')
 
     # 날짜 정보
     permit_date: Optional[datetime] = Field(None, title='건축 허가를 받은 날짜')
