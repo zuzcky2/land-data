@@ -15,49 +15,6 @@ from app.features.contracts.command import AbstractCommand
 
 class BuildingRawCommand(AbstractCommand):
 
-    def _get_last_sync_point(self, service: AbstractService, renew_days: int = 7) -> Optional[dict]:
-        """
-        로그 파일을 분석하여 마지막 성공 지점을 반환합니다.
-        --renew 옵션이 활성화된 경우, 마지막 로그 시간이 renew_days보다 오래되면 처음부터 시작합니다.
-        """
-        try:
-            from app.core.helpers.config import Config
-            from app.core.helpers.env import Env
-
-            logger_name = service.logger_name
-            logger_config = Config.get(f'logging.{logger_name}')
-            log_path = Env.get('LOG_PATH', '/var/volumes/log')
-            log_filename = os.path.join(log_path, logger_config['filename'])
-
-            if not os.path.exists(log_filename):
-                return None
-
-            with open(log_filename, 'r', encoding='utf-8') as f:
-                # 파일의 마지막 100줄을 읽어 역순으로 탐색
-                lines = f.readlines()[-100:]
-                for line in reversed(lines):
-                    if "Sync Start: " in line:
-                        # 1. 타임스탬프 파싱 (형식: 2026-01-04 20:20:16)
-                        date_match = re.search(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
-                        if date_match:
-                            log_time = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
-
-                            # 일주일 경과 확인
-                            if datetime.now() - log_time > timedelta(days=renew_days):
-                                self.message(f"⚠️ 마지막 로그 기록({log_time})이 {renew_days}일을 초과하여 처음부터 다시 시작합니다.",
-                                                fg='yellow')
-                                return None
-
-                        # 2. 파라미터 추출
-                        param_match = re.search(r"Sync Start: (\{.*\})", line)
-                        if param_match:
-                            return ast.literal_eval(param_match.group(1))
-
-        except Exception as e:
-            self.message(f"⚠️ 로그 분석 중 오류 발생: {e}", fg='yellow')
-
-        return None
-
     def sync_building_registers_by_township(self, service: AbstractService, is_continue: bool = False,
                                             is_renew: bool = False):
         """
@@ -75,7 +32,7 @@ class BuildingRawCommand(AbstractCommand):
             if is_continue:
                 # renew 옵션이 있으면 7일 기준 적용, 없으면 무조건 이어하기
                 renew_threshold = 7 if is_renew else 9999
-                last_point = self._get_last_sync_point(service, renew_threshold)
+                last_point = self._get_last_sync_point(service, renew_days=renew_threshold)
 
                 if last_point:
                     # sigunguCd(5) + bjdongCd(앞3) 조합으로 8자리 item_code 생성

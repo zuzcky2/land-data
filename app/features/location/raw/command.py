@@ -15,42 +15,6 @@ from app.core.helpers.log import Log
 
 class LocationRawCommand(AbstractCommand):
 
-    def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 7) -> Optional[dict]:
-        """로그 파일 분석을 통해 소스 타입별 마지막 처리 지점을 반환합니다."""
-        try:
-            from app.core.helpers.config import Config
-            from app.core.helpers.env import Env
-
-            full_logger_name = f"{service.logger_name}_{source_type}"
-            logger_config = Config.get(f'logging.{full_logger_name}')
-
-            if not logger_config:
-                logger_config = Config.get(f'logging.{service.logger_name}')
-
-            log_path = Env.get('LOG_PATH', '/var/volumes/log')
-            log_filename = os.path.join(log_path, logger_config['filename'])
-
-            if not os.path.exists(log_filename):
-                return None
-
-            with open(log_filename, 'r', encoding='utf-8') as f:
-                lines = f.readlines()[-100:]
-                for line in reversed(lines):
-                    if "Sync Start: " in line:
-                        date_match = re.search(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
-                        if date_match:
-                            log_time = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
-                            if datetime.now() - log_time > timedelta(days=renew_days):
-                                self.message(f"⚠️ {source_type} 로그 기록이 {renew_days}일을 초과하여 처음부터 시작합니다.", fg='yellow')
-                                return None
-
-                        param_match = re.search(r"Sync Start: (\{.*\})", line)
-                        if param_match:
-                            return ast.literal_eval(param_match.group(1))
-        except Exception as e:
-            self.message(f"⚠️ {source_type} 로그 분석 오류: {e}", fg='yellow')
-        return None
-
     def sync_address_by_building_info(self, source_type: str, is_continue: bool = False, is_renew: bool = False):
         """건축물대장 기반 주소 마스터 동기화 로직"""
         service = address_facade.address_service
@@ -174,19 +138,19 @@ class LocationRawCommand(AbstractCommand):
 
     def register_commands(self, cli_group):
         """Sync 관련 CLI 명령어 등록"""
-        @cli_group.command('location_raw:sync_address_by_group')
+        @cli_group.command('location_raw:address_by_group')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_group(is_continue, is_renew):
             self.sync_address_by_building_info('group', is_continue, is_renew)
 
-        @cli_group.command('location_raw:sync_address_by_title')
+        @cli_group.command('location_raw:address_by_title')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_title(is_continue, is_renew):
             self.sync_address_by_building_info('title', is_continue, is_renew)
 
-        @cli_group.command('location_raw:sync_address_all')
+        @cli_group.command('location_raw:address_all')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_all_cmd(is_continue, is_renew):

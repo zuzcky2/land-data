@@ -16,40 +16,6 @@ from app.core.helpers.log import Log
 
 class StructureBuildCommand(AbstractCommand):
 
-    def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 7) -> Optional[dict]:
-        """로그 파일 분석을 통해 마지막 처리 지점을 반환합니다."""
-        try:
-            from app.core.helpers.config import Config
-            from app.core.helpers.env import Env
-
-            full_logger_name = f"{service.logger_name}_{source_type}"
-            logger_config = Config.get(f'logging.{full_logger_name}')
-            if not logger_config:
-                logger_config = Config.get(f'logging.{service.logger_name}')
-
-            log_path = Env.get('LOG_PATH', '/var/volumes/log')
-            log_filename = os.path.join(log_path, logger_config['filename'])
-
-            if not os.path.exists(log_filename):
-                return None
-
-            with open(log_filename, 'r', encoding='utf-8') as f:
-                lines = f.readlines()[-100:]
-                for line in reversed(lines):
-                    if "Sync Start: " in line:
-                        date_match = re.search(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
-                        if date_match:
-                            log_time = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
-                            if datetime.now() - log_time > timedelta(days=renew_days):
-                                return None
-
-                        param_match = re.search(r"Sync Start: (\{.*\})", line)
-                        if param_match:
-                            return ast.literal_eval(param_match.group(1))
-        except Exception as e:
-            self.message(f"⚠️ 로그 분석 오류: {e}", fg='yellow')
-        return None
-
     @staticmethod
     def _worker_build_task(item: Dict[str, Any]) -> Dict[str, Any]:
         """각 코어에서 독립적으로 실행될 빌드 태스크"""
