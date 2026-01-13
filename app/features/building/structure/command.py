@@ -16,7 +16,7 @@ from app.core.helpers.log import Log
 
 class StructureBuildCommand(AbstractCommand):
 
-    def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 30) -> Optional[dict]:
+    def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 7) -> Optional[dict]:
         """로그 파일 분석을 통해 마지막 처리 지점을 반환합니다."""
         try:
             from app.core.helpers.config import Config
@@ -110,7 +110,7 @@ class StructureBuildCommand(AbstractCommand):
         self._send_slack("🏗️ 공간정보 결합 빌드 프로세스 가동")
 
         if is_continue:
-            renew_threshold = 30 if is_renew else 9999
+            renew_threshold = 7 if is_renew else 9999
             last_point = self._get_last_sync_point(structure_facade.address_service, 'build', renew_threshold)
             if last_point and '_id' in last_point:
                 from bson import ObjectId
@@ -120,9 +120,9 @@ class StructureBuildCommand(AbstractCommand):
 
         self.message("🏗️ [4-Core] 멀티프로세싱 공간정보 빌드를 시작합니다.", fg='green')
 
-        # 수정된지 30일 지난것들만 작업
+        # 수정된지 7일 지난것들만 작업
         now = datetime.now()
-        role_date = now - timedelta(days=90)
+        role_date = now - timedelta(days=7)
         try:
             with Pool(processes=4) as pool:
                 while True:

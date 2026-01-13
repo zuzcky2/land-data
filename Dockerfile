@@ -58,7 +58,7 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Logrotate 환경 변수
 ENV CRON_EXPR="* * * * *"
-ENV LOGROTATE_LOGFILES="/var/volumes/log/*.log"
+ENV LOGROTATE_LOGFILES="/var/volumes/log/*/*.log"
 ENV LOGROTATE_FILESIZE="10M"
 ENV LOGROTATE_FILENUM="5"
 ENV LOGROTATE_INTERVAL="3600"

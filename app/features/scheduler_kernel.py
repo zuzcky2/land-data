@@ -137,7 +137,7 @@ class SchedulerRegistry:
         self.register(ScheduleConfig(
             func=job_boundary_update,
             trigger='cron',
-            hour=0, minute=5,
+            hour=0, minute=0,
             job_id='boundary_daily_update',
             name='지역경계 데이터 일일 업데이트',
             environments=['development', 'production']
@@ -155,7 +155,7 @@ class SchedulerRegistry:
         self.register(ScheduleConfig(
             func=job_location_address_sync,
             trigger='cron',
-            day=1, hour=21, minute=0,
+            hour=2, minute=0,
             job_id='location_raw_address_sync_all',
             name='총괄, 표제부 기반 주소 동기화',
             environments=['development', 'production']
@@ -164,7 +164,7 @@ class SchedulerRegistry:
         self.register(ScheduleConfig(
             func=job_building_structure_build,
             trigger='cron',
-            day_of_week='tue', hour=0, minute=0,
+            hour=3, minute=0,
             job_id='building_structure_address_build',
             name='주소 기반 좌표 및 지적도 결합 빌드',
             environments=['development', 'production']

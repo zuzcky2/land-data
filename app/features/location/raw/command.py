@@ -15,7 +15,7 @@ from app.core.helpers.log import Log
 
 class LocationRawCommand(AbstractCommand):
 
-    def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 30) -> Optional[dict]:
+    def _get_last_sync_point(self, service: AddressService, source_type: str, renew_days: int = 7) -> Optional[dict]:
         """로그 파일 분석을 통해 소스 타입별 마지막 처리 지점을 반환합니다."""
         try:
             from app.core.helpers.config import Config
@@ -82,9 +82,9 @@ class LocationRawCommand(AbstractCommand):
 
             self.message(f"🚀 {msg_prefix} 기반 주소 마스터 수집을 시작합니다.", fg='green')
 
-            # 수정된지 30일 지난것들만 작업
+            # 수정된지 7일 지난것들만 작업
             now =  datetime.now()
-            role_date = now - timedelta(days=90)
+            role_date = now - timedelta(days=7)
             while True:
                 query_params = {
                     'page': 1,
