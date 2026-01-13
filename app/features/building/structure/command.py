@@ -130,6 +130,7 @@ class StructureBuildCommand(AbstractCommand):
                         '$or': [
                             {'updated_at': {'lt': role_date}},
                             {'address_id': {'$exists': False}},
+                            {'address_id': None}
                         ],
                         'dead': {'$ne': True},
                         'page': 1,
