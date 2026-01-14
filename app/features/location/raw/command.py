@@ -57,8 +57,8 @@ class LocationRawCommand(AbstractCommand):
                         {'updated_at': {'lt': role_date}},
                         {'bdMgtSn': {'$exists': False}},
                         {'bdMgtSn': None},
-                        {'newPlatPlc': {'$nin': ['', None, ' ']}}
                     ],
+                    'newPlatPlc': {'$nin': ['', None, ' ']},
                     'dead': {'$ne': True},
                     'sort': [('_id', 1)]
                 }
