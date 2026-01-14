@@ -96,6 +96,8 @@ class LocationRawCommand(AbstractCommand):
                             'bldNm': item.get('bldNm')
                         }
 
+                        dd(sync_params)
+
                         result = service.sync_from_jgk(sync_params, source=source_type)
 
                         if result.get('status') == 'success' and result.get('bdMgtSn'):
