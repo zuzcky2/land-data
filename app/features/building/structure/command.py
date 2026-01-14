@@ -152,21 +152,7 @@ class StructureBuildCommand(AbstractCommand):
                 return {'success': False, 'id': current_id, 'error': 'No building_manage_number'}
 
             # 실제 빌드 서비스 호출
-            result = structure_facade.complex_service.build_by_address(item)
-
-            # 🚀 [수정 지점] result가 객체인지, 아니면 딕셔너리인지에 따라 안전하게 접근
-            # 만약 result가 None이면 'NoneType' 에러 방지를 위해 방어 로직 강화
-            if result:
-                # result가 객체라면 getattr 사용, dict라면 .get() 사용
-                address_id = getattr(result, 'building_manage_number', None)
-                if address_id is None and isinstance(result, dict):
-                    address_id = result.get('building_manage_number')
-
-                item['address_id'] = address_id
-                item['dead'] = False
-            else:
-                item['address_id'] = None
-                item['dead'] = True
+            structure_facade.complex_service.build_by_address(item)
 
             if location_raw_facade and location_raw_facade.address_service:
                 location_raw_facade.address_service.manager.driver('mongodb').store([item])
@@ -209,12 +195,6 @@ class StructureBuildCommand(AbstractCommand):
             with Pool(processes=4) as pool:
                 while True:
                     query_params = {
-                        '$or': [
-                            {'updated_at': {'lt': role_date}},
-                            {'complex_ids': {'$exists': False}},
-                            {'complex_ids': None},
-                        ],
-                        'dead': {'$ne': True},
                         'page': 1,
                         'per_page': per_page,
                         'sort': [('_id', 1)]

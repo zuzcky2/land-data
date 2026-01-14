@@ -24,6 +24,8 @@ GeoJSONMultiPolygonType = Dict[str, Union[str, GeoMultiPolygon]]  # 멀티폴리
 class AddressDto(MongoModel):
     pnu: str = Field(None, title='필지 고유 식별 번호 (PNU)')
     building_manage_number: str = Field(None, title='건물관리번호 (25자리, bdMgtSn)')
+    address_name: Optional[str] = Field(None, title='주소 이름')
+    display_address_name: str = Field(None, title='주소 표기 이름')
 
     state: str = Field(title='시/도 코드 2자리')
     state_name: str = Field(title='시/도 이름')

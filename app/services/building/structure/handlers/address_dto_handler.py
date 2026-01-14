@@ -36,11 +36,16 @@ class AddressDtoHandler:
         # 4. 도로명/지번 본부번 결합 (예: 123-0 -> 123)
         road_suffix = self._combine_num(address_raw.get('buldMnnm'), address_raw.get('buldSlno'))
         block_suffix = self._combine_num(address_raw.get('lnbrMnnm'), address_raw.get('lnbrSlno'))
+        raw_bd_nm = address_raw.get('bdNm')
+        address_name = raw_bd_nm.strip() if raw_bd_nm and raw_bd_nm.strip() else None
+
 
         # 5. DTO 생성 및 반환
         return AddressDto(
             building_manage_number=bd_mgt_sn,
             pnu=bd_mgt_sn[:19],
+            address_name=address_name,
+            display_address_name=address_name if address_name else address_raw.get('rn'),
 
             # 행정구역 매핑
             state=state_boundary.item_code,

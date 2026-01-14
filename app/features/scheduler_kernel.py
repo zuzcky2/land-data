@@ -65,10 +65,15 @@ def job_location_raw_sync():
     from app.features.location.raw.command import LocationRawCommand
     execute_job(LocationRawCommand().handle_sync_all, "총괄, 표제부 기반 주소 동기화", is_continue=False, is_renew=False)
 
-def job_building_structure_build():
+def job_building_structure_address_build():
     """공간정보 빌드 래퍼"""
     from app.features.building.structure.command import StructureBuildCommand
-    execute_job(StructureBuildCommand().handle, "주소 기반 좌표 및 지적도 결합 빌드", is_continue=False, is_renew=False)
+    execute_job(StructureBuildCommand().address_handle, "주소 기반 좌표 및 지적도 결합 빌드", is_continue=False, is_renew=False)
+
+def job_building_structure_complex_build():
+    """공간정보 빌드 래퍼"""
+    from app.features.building.structure.command import StructureBuildCommand
+    execute_job(StructureBuildCommand().complex_handle, "주소 기반 단지 빌드", is_continue=False, is_renew=False)
 
 @dataclass
 class ScheduleConfig:
@@ -162,11 +167,20 @@ class SchedulerRegistry:
         ))
 
         self.register(ScheduleConfig(
-            func=job_building_structure_build,
+            func=job_building_structure_address_build,
             trigger='cron',
             hour=3, minute=0,
             job_id='building_structure_address_build',
             name='주소 기반 좌표 및 지적도 결합 빌드',
+            environments=['development', 'production']
+        ))
+
+        self.register(ScheduleConfig(
+            func=job_building_structure_complex_build,
+            trigger='cron',
+            hour=4, minute=0,
+            job_id='building_structure_complex_build',
+            name='주소 기반 단지 정보 빌드',
             environments=['development', 'production']
         ))
 

@@ -49,23 +49,22 @@ class ComplexService(AbstractService):
             address_dto = AddressDto(**address_dto)
         return self._run_build_pipeline(address_dto)
 
-    def _run_build_pipeline(self, address_dto: AddressDto) -> Optional[ComplexDto]:
+    def _run_build_pipeline(self, address_dto: AddressDto):
         try:
             complex_type = 'group'
             building_params = {'bdMgtSn': address_dto.building_manage_number, 'dead': {'$ne': True}}
 
-            building = self._group_info_service.get_detail(building_params)
+            buildings = self._group_info_service.get_list(building_params)
 
-            if not building:
+            if buildings.meta.total < 1:
                 complex_type = 'title'
-                building = self._title_info_service.get_detail(building_params)
+                buildings = self._title_info_service.get_list(building_params)
 
-            dto = self.complex_dto_handler.handle(address_dto, complex_type, building)
+            for building in buildings.items:
+                dto = self.complex_dto_handler.handle(address_dto, complex_type, building)
 
-            if dto:
-                self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
-
-            return dto
+                if dto:
+                    self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
 
         except Exception as e:
             Log.get_logger(self.logger_name).error(f"Build Pipeline Error [{address_dto.building_manage_number}]: {str(e)}")

@@ -32,11 +32,14 @@ class ComplexDtoHandler:
         indoor_parking = int(raw_data.get('indrAutoUtcnt') or 0) + int(raw_data.get('indrMechUtcnt') or 0)
         outdoor_parking = int(raw_data.get('oudrAutoUtcnt') or 0) + int(raw_data.get('oudrMechUtcnt') or 0)
 
+        raw_data_name = raw_data.get('bldNm').strip()
+        item_name = raw_data_name if raw_data_name else address_dto.display_address_name
+
         # 4. DTO 생성 (수정된 ComplexDto 필드 기준)
         return ComplexDto(
             building_manage_number=address_dto.building_manage_number,
-            address_id=address_dto.id,
-            item_name=raw_data.get('bldNm', '').strip() or address_dto.building_name,
+            address_id=ObjectId(address_dto.id),
+            item_name=item_name,
             register_kind_code=raw_data.get('regstrKindCdNm', '') or "",
 
             # 규모 및 면적
