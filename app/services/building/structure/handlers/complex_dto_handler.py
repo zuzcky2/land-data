@@ -41,6 +41,7 @@ class ComplexDtoHandler:
             address_id=ObjectId(address_dto.id),
             item_name=item_name,
             register_kind_code=raw_data.get('regstrKindCdNm', '') or "",
+            register_manage_number=raw_data.get('mgmBldrgstPk'),
 
             # 규모 및 면적
             land_area=float(raw_data.get('platArea') or 0),

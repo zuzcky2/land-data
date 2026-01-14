@@ -11,6 +11,7 @@ class ComplexDto(MongoModel):
     address_id: ObjectId = Field(title='address dto 객체의 id')
     item_name: str = Field(title='단지명 (건물명)')
     register_kind_code: str = Field(title='대장구분 (총괄표제부, 일반건축물, 표제부)')
+    register_manage_number: str = Field(title='총괄표제부, 일반건축물, 표제부의 PK')
 
     # 규모 및 면적
     land_area: float = Field(title='대지면적')
