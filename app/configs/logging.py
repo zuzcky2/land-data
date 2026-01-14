@@ -83,6 +83,8 @@ configs: dict = {
     'location_raw_address_title': _create_logging_config('location_raw_address_title', 'location_raw/address_title.log'),
     'building_structure_address': _create_logging_config('building_structure_address', 'building_structure/address_service.log'),
     'building_structure_address_build': _create_logging_config('building_structure_address_build', 'building_structure/address_build.log'),
+    'building_structure_complex': _create_logging_config('building_structure_complex', 'building_structure/complex_service.log'),
+    'building_structure_complex_build': _create_logging_config('building_structure_complex_build', 'building_structure/complex_build.log'),
 }
 
 __all__ = ['configs']

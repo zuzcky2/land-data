@@ -57,6 +57,7 @@ class LocationRawCommand(AbstractCommand):
                         {'updated_at': {'lt': role_date}},
                         {'bdMgtSn': {'$exists': False}},
                         {'bdMgtSn': None},
+                        {'newPlatPlc': {'$nin': ['', None, ' ']}}
                     ],
                     'dead': {'$ne': True},
                     'sort': [('_id', 1)]
@@ -78,13 +79,13 @@ class LocationRawCommand(AbstractCommand):
 
                 for item in items:
                     try:
-                        keyword = item.get('newPlatPlc', '').strip() or item.get('platPlc', '').strip()
+                        keyword = item.get('newPlatPlc', '').strip()
                         if not keyword:
                             last_id = item['_id']
                             continue
 
 
-                        search_queries = [item.get('newPlatPlc'), item.get('platPlc')]
+                        search_queries = [item.get('newPlatPlc')]
                         search_queries = [q for q in search_queries if q]
 
                         sync_params = {

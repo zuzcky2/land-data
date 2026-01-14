@@ -1,6 +1,6 @@
 from bson import ObjectId
 from pydantic import Field
-from typing import Optional
+from typing import Optional, List
 from app.services.contracts.dto import MongoModel
 from datetime import datetime
 
@@ -32,9 +32,11 @@ class ComplexDto(MongoModel):
     indoor_parking_count: Optional[int] = Field(None, title='건물 내부 자주식 주차 대수')
     outdoor_parking_count: Optional[int] = Field(None, title='건물 외부 자주식 주차 대수')
 
-    # 주요 용도
-    main_purpose_name: Optional[str] = Field(None, title='건축물대장상 공식 주용도')
-    etc_purpose_name: list = Field([], title='주용도 외 세부 용도 기록')
+    # 카테고리 정보 (단수 & 복수)
+    main_category: str = Field(title='대표 1차 카테고리')
+    sub_category: str = Field(title='대표 2차 카테고리')
+    category_tags: List[str] = Field(default_factory=list, title='1차 카테고리 태그 리스트')
+    sub_category_tags: List[str] = Field(default_factory=list, title='2차 카테고리 태그 리스트')
 
     # 날짜 정보
     permit_date: Optional[datetime] = Field(None, title='건축 허가를 받은 날짜')

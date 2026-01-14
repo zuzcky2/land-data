@@ -9,7 +9,7 @@ from app.services.location.boundary.service import BoundaryService
 from app.services.building.structure.handlers.complex_dto_handler import ComplexDtoHandler
 from app.services.building.structure.dtos.address_dto import AddressDto
 from app.services.building.structure.dtos.complex_dto import ComplexDto
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from app.core.helpers.log import Log
 
 
@@ -44,8 +44,9 @@ class ComplexService(AbstractService):
 
         return self._run_build_pipeline(AddressDto(**address_item))
 
-    def build_by_address(self, address_dto: AddressDto) -> Optional[ComplexDto]:
-
+    def build_by_address(self, address_dto: Union[dict, AddressDto]) -> Optional[ComplexDto]:
+        if isinstance(address_dto, dict):
+            address_dto = AddressDto(**address_dto)
         return self._run_build_pipeline(address_dto)
 
     def _run_build_pipeline(self, address_dto: AddressDto) -> Optional[ComplexDto]:
