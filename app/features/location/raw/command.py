@@ -22,6 +22,9 @@ class LocationRawCommand(AbstractCommand):
         if source_type == 'group':
             building_service = building_facade.group_info_service
             msg_prefix = "🏢 [총괄표제부]"
+        elif source_type == 'basic':
+            building_service = building_facade.basic_info_service
+            msg_prefix = "🏢 [기본개요]"
         else:
             building_service = building_facade.title_info_service
             msg_prefix = "🏠 [표제부]"
@@ -29,7 +32,7 @@ class LocationRawCommand(AbstractCommand):
         self._send_slack(f"🚀 {msg_prefix} 주소 동기화 가동")
 
         try:
-            per_page = 1000
+            per_page = 10000
             total_count = 0
             last_id = None
 
@@ -65,9 +68,9 @@ class LocationRawCommand(AbstractCommand):
 
                 if last_id:
                     query_params['_id'] = {'$gt': last_id}
-
-                if source_type == 'title':
-                    query_params['bun'] = {'$ne': '0000'}
+                elif source_type == 'basic':
+                    query_params['mgmUpBldrgstPk'] = '0'
+                    query_params['regstrKindCd'] = {'$ne': '4'}
 
                 pagination = building_service.get_list(query_params, driver_name='mongodb')
 
@@ -150,6 +153,12 @@ class LocationRawCommand(AbstractCommand):
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_title(is_continue, is_renew):
             self.sync_address_by_building_info('title', is_continue, is_renew)
+
+        @cli_group.command('location_raw:address_by_basic')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_title(is_continue, is_renew):
+            self.sync_address_by_building_info('basic', is_continue, is_renew)
 
         @cli_group.command('location_raw:address_all')
         @click.option('--continue', 'is_continue', is_flag=True)
