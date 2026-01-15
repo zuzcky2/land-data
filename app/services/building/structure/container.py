@@ -48,6 +48,7 @@ class StructureContainer(AbstractContainer):
         manager=complex_manager,
         complex_dto_handler=complex_dto_handler,
         address_service=address_service,
+        basic_info_service=building_raw.basic_info_service,
         group_info_service=building_raw.group_info_service,
         title_info_service=building_raw.title_info_service
     )

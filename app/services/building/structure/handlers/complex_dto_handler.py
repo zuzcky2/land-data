@@ -77,7 +77,7 @@ class ComplexDtoHandler:
             display_date=display_date,
 
             # 인허가 정보
-            permit_authority=raw_data.get('pmsnoKikCdNm'),
+            permit_authority=raw_data.get('pmsnoKikCdNm').strip() if raw_data.get('pmsnoKikCdNm').strip() else None,
             permit_year=self._parse_date(raw_data.get('pmsnoYear'), "%Y") if str(
                 raw_data.get('pmsnoYear')).strip() else None
         )

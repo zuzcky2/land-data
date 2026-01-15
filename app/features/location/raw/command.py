@@ -3,8 +3,10 @@ import os
 import re
 import click
 import time
+import traceback
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from multiprocessing import Pool
 
 from app.facade import command
 from app.services.location.raw import facade as address_facade
@@ -13,12 +15,68 @@ from app.services.building.raw import facade as building_facade
 from app.features.contracts.command import AbstractCommand
 from app.core.helpers.log import Log
 
+
 class LocationRawCommand(AbstractCommand):
 
-    def sync_address_by_building_info(self, source_type: str, is_continue: bool = False, is_renew: bool = False):
-        """건축물대장 기반 주소 마스터 동기화 로직"""
-        service = address_facade.address_service
+    @staticmethod
+    def _worker_sync_address_task(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """각 코어에서 독립적으로 실행될 주소 동기화 태스크"""
+        item = payload.get('item')
+        source_type = payload.get('source_type')
+        role_date = payload.get('role_date')
 
+        current_id = item.get('_id') if item else 'Unknown'
+        mgm_pk = item.get('mgmBldrgstPk', 'Unknown')
+
+        try:
+            if not item:
+                return {'success': False, 'id': 'None', 'error': 'Item is None'}
+
+            # 서비스 레이어 접근
+            service = address_facade.address_service
+            if source_type == 'group':
+                building_service = building_facade.group_info_service
+            elif source_type == 'basic':
+                building_service = building_facade.basic_info_service
+            else:
+                building_service = building_facade.title_info_service
+
+            keyword = item.get('newPlatPlc', '').strip()
+            if not keyword:
+                return {'success': False, 'id': current_id, 'error': 'Empty newPlatPlc'}
+
+            # 동기화 파라미터 구성
+            search_queries = [keyword]
+            sync_params = {
+                '_id': str(current_id),
+                'search_queries': {'$in': search_queries},
+                'updated_at': {'$gt': role_date},
+                'mgmBldrgstPk': mgm_pk,
+                'bldNm': item.get('bldNm')
+            }
+
+            # JGK 연동 및 검증 로직 실행 (이미 수정하신 AddressService.sync_from_jgk 호출)
+            result = service.sync_from_jgk(sync_params, source=source_type)
+
+            # 결과 반영
+            if result.get('status') == 'success' and result.get('bdMgtSn'):
+                item['bdMgtSn'] = result['bdMgtSn']
+                item['dead'] = False  # 성공 시 dead 해제
+            elif result.get('status') == 'fail' and result.get('dead'):
+                item['dead'] = True
+                item['bdMgtSn'] = None
+
+            # 데이터 저장
+            building_service.manager.driver('mongodb').store([item])
+
+            return {'success': True, 'id': current_id}
+
+        except Exception as e:
+            error_detail = f"{str(e)}\n{traceback.format_exc()}"
+            return {'success': False, 'id': current_id, 'error': error_detail, 'pk': mgm_pk}
+
+    def sync_address_by_building_info(self, source_type: str, is_continue: bool = False, is_renew: bool = False):
+        """건축물대장 기반 주소 마스터 동기화 로직 (Multi-Core)"""
         if source_type == 'group':
             building_service = building_facade.group_info_service
             msg_prefix = "🏢 [총괄표제부]"
@@ -29,12 +87,13 @@ class LocationRawCommand(AbstractCommand):
             building_service = building_facade.title_info_service
             msg_prefix = "🏠 [표제부]"
 
-        self._send_slack(f"🚀 {msg_prefix} 주소 동기화 가동")
+        self._send_slack(f"🚀 {msg_prefix} 멀티프로세싱 동기화 가동")
 
         try:
             per_page = 10000
             total_count = 0
             last_id = None
+            service = address_facade.address_service
 
             if is_continue:
                 renew_threshold = 7 if is_renew else 9999
@@ -45,82 +104,67 @@ class LocationRawCommand(AbstractCommand):
                         last_id = ObjectId(last_point['_id'])
                     except:
                         last_id = last_point['_id']
-                    self.message(f"🔄 {msg_prefix} 이어하기: {last_id} 이후부터 시작합니다.", fg='magenta')
+                    self.message(f"🔄 {msg_prefix} 이어하기: {last_id} 이후부터 시작", fg='magenta')
 
-            self.message(f"🚀 {msg_prefix} 기반 주소 마스터 수집을 시작합니다.", fg='green')
+            self.message(f"🏗️ [4-Core] {msg_prefix} 병렬 수집을 시작합니다.", fg='green')
 
-            # 수정된지 7일 지난것들만 작업
-            now =  datetime.now()
+            now = datetime.now()
             role_date = now - timedelta(days=7)
-            while True:
-                query_params = {
-                    'page': 1,
-                    'per_page': per_page,
-                    '$or': [
-                        {'updated_at': {'lt': role_date}},
-                        {'bdMgtSn': {'$exists': False}},
-                        {'bdMgtSn': None},
-                    ],
-                    'newPlatPlc': {'$nin': ['', None, ' ']},
-                    'dead': {'$ne': True},
-                    'sort': [('_id', 1)]
-                }
 
-                if last_id:
-                    query_params['_id'] = {'$gt': last_id}
-                elif source_type == 'basic':
-                    query_params['mgmUpBldrgstPk'] = '0'
-                    query_params['regstrKindCd'] = {'$ne': '4'}
+            with Pool(processes=4) as pool:
+                while True:
+                    query_params = {
+                        'page': 1,
+                        'per_page': per_page,
+                        '$or': [
+                            {'updated_at': {'$lt': role_date}},
+                            {'bdMgtSn': {'$exists': False}},
+                            {'bdMgtSn': None},
+                        ],
+                        'newPlatPlc': {'$nin': ['', None, ' ']},
+                        'dead': {'$ne': True},
+                        'sort': [('_id', 1)]
+                    }
 
-                pagination = building_service.get_list(query_params, driver_name='mongodb')
+                    if last_id:
+                        query_params['_id'] = {'$gt': last_id}
+                    elif source_type == 'basic':
+                        query_params['mgmUpBldrgstPk'] = '0'
+                        query_params['regstrKindCd'] = {'$ne': '4'}
 
-                items = pagination.items or []
+                    pagination = building_service.get_list(query_params, driver_name='mongodb')
+                    items = pagination.items or []
 
-                if not items:
-                    self.message(f"✅ {msg_prefix} 모든 데이터를 처리했습니다.", fg='blue')
-                    break
+                    if not items:
+                        self.message(f"✅ {msg_prefix} 모든 데이터를 처리했습니다.", fg='blue')
+                        break
 
-                for item in items:
-                    try:
-                        keyword = item.get('newPlatPlc', '').strip()
-                        if not keyword:
-                            last_id = item['_id']
-                            continue
+                    # 워커에 전달할 페이로드 구성
+                    worker_payloads = [
+                        {'item': item, 'source_type': source_type, 'role_date': role_date}
+                        for item in items
+                    ]
 
+                    # 병렬 처리 시작
+                    results = pool.map(self._worker_sync_address_task, worker_payloads)
 
-                        search_queries = [item.get('newPlatPlc')]
-                        search_queries = [q for q in search_queries if q]
+                    # 결과 집계 및 에러 출력
+                    chunk_success_count = sum(1 for r in results if r['success'])
+                    for r in results:
+                        if not r['success'] and r.get('error') not in ['Empty newPlatPlc']:
+                            self.message(f"❌ PK {r.get('pk')} 에러: {r['error']}", fg='red')
 
-                        sync_params = {
-                            '_id': str(item['_id']),
-                            'search_queries': {'$in': search_queries},
-                            'updated_at': {'$gt': role_date},
-                            'mgmBldrgstPk': item.get('mgmBldrgstPk'),
-                            'bldNm': item.get('bldNm')
-                        }
+                    last_item = items[-1]
+                    last_id = last_item['_id']
+                    total_count += len(items)
 
-                        result = service.sync_from_jgk(sync_params, source=source_type)
+                    self.message(
+                        f"  -> {msg_prefix} {total_count}건 처리 중... (성공: {chunk_success_count}/{len(items)}, ID: {last_id})",
+                        fg='white'
+                    )
 
-                        if result.get('status') == 'success' and result.get('bdMgtSn'):
-                            item['bdMgtSn'] = result['bdMgtSn']
-                        elif result.get('status') == 'fail' and result.get('dead'):
-                            item['dead'] = True
-
-                        building_service.manager.driver('mongodb').store([item])
-
-                        last_id = item['_id']
-                        total_count += 1
-
-                        if total_count % 50 == 0:
-                            self.message(f"  -> {msg_prefix} {total_count}건 처리 완료 (ID: {last_id})", fg='white')
-
-                    except Exception as e:
-                        self.message(f"❌ PK {item.get('mgmBldrgstPk')} 에러: {e}", fg='red')
-                        last_id = item['_id']
-                        continue
-
-                if len(items) < per_page:
-                    break
+                    if len(items) < per_page:
+                        break
 
             self._send_slack(f"✅ {msg_prefix} 완료 (총 {total_count}건)")
 
@@ -143,6 +187,7 @@ class LocationRawCommand(AbstractCommand):
 
     def register_commands(self, cli_group):
         """Sync 관련 CLI 명령어 등록"""
+
         @cli_group.command('location_raw:address_by_group')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
@@ -158,7 +203,7 @@ class LocationRawCommand(AbstractCommand):
         @cli_group.command('location_raw:address_by_basic')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
-        def sync_title(is_continue, is_renew):
+        def sync_basic(is_continue, is_renew):
             self.sync_address_by_building_info('basic', is_continue, is_renew)
 
         @cli_group.command('location_raw:address_all')
@@ -166,5 +211,6 @@ class LocationRawCommand(AbstractCommand):
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_all_cmd(is_continue, is_renew):
             self.handle_sync_all(is_continue, is_renew)
+
 
 __all__ = ['LocationRawCommand']

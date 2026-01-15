@@ -1,3 +1,4 @@
+from app.services.building.raw.services.basic_info_service import BasicInfoService
 from app.services.building.raw.services.group_info_service import GroupInfoService
 from app.services.building.raw.services.title_info_service import TitleInfoService
 from app.services.building.structure.managers.address_manager import AddressManager
@@ -20,11 +21,13 @@ class ComplexService(AbstractService):
          manager: ComplexManager,
          complex_dto_handler: ComplexDtoHandler,
          address_service: AddressService,
+         basic_info_service: BasicInfoService,
          group_info_service: GroupInfoService,
          title_info_service: TitleInfoService):
         self._manager = manager
         self.complex_dto_handler = complex_dto_handler
         self._address_service = address_service
+        self._basic_info_service = basic_info_service
         self._group_info_service = group_info_service
         self._title_info_service = title_info_service
 
@@ -51,20 +54,31 @@ class ComplexService(AbstractService):
 
     def _run_build_pipeline(self, address_dto: AddressDto):
         try:
-            complex_type = 'group'
-            building_params = {'bdMgtSn': address_dto.building_manage_number, 'dead': {'$ne': True}}
+            building_params = {
+                'bdMgtSn': address_dto.building_manage_number,
+                'mgmUpBldrgstPk': '0',
+                'dead': {'$ne': True}
+            }
 
-            buildings = self._group_info_service.get_list(building_params)
+            buildings = self._basic_info_service.get_list(building_params)
 
-            if buildings.meta.total < 1:
-                complex_type = 'title'
-                buildings = self._title_info_service.get_list(building_params)
+            for building_info in buildings.items:
+                if building_info.get('regstrKindCd') == '1':
+                    complex_type = 'group'
+                    building = self._group_info_service.get_detail({
+                        'mgmBldrgstPk': building_info.get('mgmBldrgstPk')
+                    })
+                else:
+                    complex_type = 'title'
+                    building = self._title_info_service.get_detail({
+                        'mgmBldrgstPk': building_info.get('mgmBldrgstPk')
+                    })
 
-            for building in buildings.items:
-                dto = self.complex_dto_handler.handle(address_dto, complex_type, building)
+                if building:
+                    dto = self.complex_dto_handler.handle(address_dto, complex_type, building)
 
-                if dto:
-                    self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
+                    if dto:
+                        self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
 
         except Exception as e:
             Log.get_logger(self.logger_name).error(f"Build Pipeline Error [{address_dto.building_manage_number}]: {str(e)}")
