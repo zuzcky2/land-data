@@ -133,8 +133,9 @@ class LocationRawCommand(AbstractCommand):
         self.message("📅 스케줄러: 주소 동기화 작업을 시작합니다.", fg='cyan')
         start_time = time.time()
 
-        self.sync_address_by_building_info('group', is_continue, is_renew)
-        self.sync_address_by_building_info('title', is_continue, is_renew)
+        #self.sync_address_by_building_info('group', is_continue, is_renew)
+        #self.sync_address_by_building_info('title', is_continue, is_renew)
+        self.sync_address_by_building_info('basic', is_continue, is_renew)
 
         total_time = int(time.time() - start_time)
         self.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
