@@ -9,7 +9,7 @@ class ComplexMongodbDriver(AbstractMongodbDriver, DriverInterface):
 
     @property
     def primary_key(self) -> str:
-        return 'building_manage_number'
+        return 'register_manage_number'
 
     @property
     def collection(self) -> Collection:
@@ -20,5 +20,5 @@ class ComplexMongodbDriver(AbstractMongodbDriver, DriverInterface):
     @property
     def convert_types(self) -> dict:
         return {
-            'building_manage_number': str
+            'register_manage_number': str
         }
