@@ -57,6 +57,7 @@ class ComplexService(AbstractService):
             building_params = {
                 'bdMgtSn': address_dto.building_manage_number,
                 'mgmUpBldrgstPk': '0',
+                'regstrKindCd': {'$in': ['1', '2', '3']},
                 'dead': {'$ne': True}
             }
 
