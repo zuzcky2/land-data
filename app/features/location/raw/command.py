@@ -8,12 +8,10 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from multiprocessing import Pool
 
-from app.facade import command
-from app.services.location.raw import facade as address_facade
-from app.services.location.raw.services.address_service import AddressService
+from app.core.helpers.config import Config
+from app.services.location.raw import facade as location_raw_facade
 from app.services.building.raw import facade as building_facade
 from app.features.contracts.command import AbstractCommand
-from app.core.helpers.log import Log
 
 
 class LocationRawCommand(AbstractCommand):
@@ -33,7 +31,7 @@ class LocationRawCommand(AbstractCommand):
                 return {'success': False, 'id': 'None', 'error': 'Item is None'}
 
             # 서비스 레이어 접근
-            service = address_facade.address_service
+            service = location_raw_facade.address_service
             if source_type == 'group':
                 building_service = building_facade.group_info_service
             elif source_type == 'basic':
@@ -93,7 +91,7 @@ class LocationRawCommand(AbstractCommand):
             per_page = 10000
             total_count = 0
             last_id = None
-            service = address_facade.address_service
+            service = location_raw_facade.address_service
 
             if is_continue:
                 renew_threshold = 7 if is_renew else 9999
@@ -185,6 +183,86 @@ class LocationRawCommand(AbstractCommand):
         self.message(f"✨ 전체 동기화 완료 (총 소요시간: {total_time}초)", fg='white', bg='blue')
         self._send_slack(f"✨ 주소 동기화 전체 완료 (소요시간: {total_time}초)")
 
+    def handle_block_address(self, is_continue: bool = False, is_renew: bool = False):
+        directory_path = f"{Config.get('app.project_root')}/resources/juso_go_kr/address_db/current"
+        service = location_raw_facade.block_address_service
+
+        self._send_slack("🏘️ 관련지번 마스터 임포트 가동")
+
+        try:
+            # 서비스 내부에서 read()를 통해 가져온 파일 목록
+            files = service.get_import_target_files(directory_path)
+
+            total_count = 0
+
+            for file_path in files:
+                file_name = os.path.basename(file_path)
+
+                # 서비스 내부에서 read()를 통해 파싱하고 저장
+                saved_count = service.import_single_file(file_path)
+
+                total_count += saved_count
+                self.message(f"  -> 📄 {file_name}: {saved_count}건 저장 완료", fg='white')
+
+            self._send_slack(f"✨ 전체 임포트 종료 (총 {total_count}건)")
+
+        except Exception as e:
+            self._handle_error(e, "관련지번 임포트 중단")
+
+    def handle_road_address(self, is_continue: bool = False, is_renew: bool = False):
+        directory_path = f"{Config.get('app.project_root')}/resources/juso_go_kr/address_db/current"
+        service = location_raw_facade.road_address_service
+
+        self._send_slack("🏘️ 도로주소 마스터 임포트 가동")
+
+        try:
+            # 서비스 내부에서 read()를 통해 가져온 파일 목록
+            files = service.get_import_target_files(directory_path)
+            total_count = 0
+
+            for file_path in files:
+                file_name = os.path.basename(file_path)
+
+                # 서비스 내부에서 read()를 통해 파싱하고 저장
+                saved_count = service.import_single_file(file_path)
+
+                total_count += saved_count
+                self.message(f"  -> 📄 {file_name}: {saved_count}건 저장 완료", fg='white')
+
+            self._send_slack(f"✨ 전체 임포트 종료 (총 {total_count}건)")
+
+        except Exception as e:
+            self._handle_error(e, "도로주소 임포트 중단")
+
+    def handle_building_group(self, is_continue: bool = False, is_renew: bool = False):
+        directory_path = f"{Config.get('app.project_root')}/resources/juso_go_kr/address_db/current"
+        service = location_raw_facade.building_group_service
+
+        self._send_slack("🏘️ 부가정보 마스터 임포트 가동")
+
+        try:
+            # 서비스 내부에서 read()를 통해 가져온 파일 목록
+            files = service.get_import_target_files(directory_path)
+            total_count = 0
+
+            for file_path in files:
+                file_name = os.path.basename(file_path)
+
+                # 서비스 내부에서 read()를 통해 파싱하고 저장
+                saved_count = service.import_single_file(file_path)
+
+                total_count += saved_count
+                self.message(f"  -> 📄 {file_name}: {saved_count}건 저장 완료", fg='white')
+
+            self._send_slack(f"✨ 전체 임포트 종료 (총 {total_count}건)")
+
+        except Exception as e:
+            self._handle_error(e, "부가정보 임포트 중단")
+
+    def handle_address_db(self):
+        location_raw_facade.address_db_service.run()
+
+
     def register_commands(self, cli_group):
         """Sync 관련 CLI 명령어 등록"""
 
@@ -211,6 +289,28 @@ class LocationRawCommand(AbstractCommand):
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_all_cmd(is_continue, is_renew):
             self.handle_sync_all(is_continue, is_renew)
+
+        @cli_group.command('location_raw:block_address_all')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_block_address(is_continue, is_renew):
+            self.handle_block_address(is_continue, is_renew)
+
+        @cli_group.command('location_raw:road_address_all')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_road_address(is_continue, is_renew):
+            self.handle_road_address(is_continue, is_renew)
+
+        @cli_group.command('location_raw:building_group_all')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_building_group(is_continue, is_renew):
+            self.handle_building_group(is_continue, is_renew)
+
+        @cli_group.command('location_raw:address_db')
+        def sync_address_db():
+            self.handle_address_db()
 
 
 __all__ = ['LocationRawCommand']

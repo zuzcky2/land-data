@@ -20,7 +20,7 @@ class PointGeometryManager(AbstractManager):
         return self._mongodb_driver
 
     @property
-    def jgk_driver(self) -> DriverInterface:
+    def vworld_driver(self) -> DriverInterface:
         return self._vworld_driver
 
     def _create_vworld_driver(self) -> DriverInterface:

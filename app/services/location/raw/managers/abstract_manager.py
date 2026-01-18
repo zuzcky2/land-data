@@ -11,11 +11,6 @@ class AbstractManager(ContractAbstractManager, ABC):
     def mongodb_driver(self) -> DriverInterface:
         pass
 
-    @property
-    @abstractmethod
-    def jgk_driver(self) -> DriverInterface:
-        pass
-
     def get_default_driver(self) -> str:
         return 'mongodb'
 

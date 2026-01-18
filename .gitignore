@@ -114,6 +114,7 @@ nohup.out
 /requirements.txt
 /supervisord.pid
 /docker/jupyter/migrated
+/resources
 
 .env.local
 .env.prod

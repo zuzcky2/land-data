@@ -83,6 +83,12 @@ configs: dict = {
     'location_raw_address_group': _create_logging_config('location_raw_address_group', 'location_raw/address_group.log'),
     'location_raw_address_title': _create_logging_config('location_raw_address_title', 'location_raw/address_title.log'),
     'location_raw_address_basic': _create_logging_config('location_raw_address_basic', 'location_raw/address_basic.log'),
+
+    'location_raw_block_address': _create_logging_config('location_raw_block_address', 'location_raw/block_address.log'),
+    'location_raw_road_address': _create_logging_config('location_raw_road_address', 'location_raw/road_address.log'),
+    'location_raw_building_group': _create_logging_config('location_raw_building_group', 'location_raw/building_group.log'),
+    'location_raw_address_db': _create_logging_config('location_raw_address_db', 'location_raw/address_db.log'),
+
     'building_structure_address': _create_logging_config('building_structure_address', 'building_structure/address_service.log'),
     'building_structure_address_build': _create_logging_config('building_structure_address_build', 'building_structure/address_build.log'),
     'building_structure_complex': _create_logging_config('building_structure_complex', 'building_structure/complex_service.log'),
