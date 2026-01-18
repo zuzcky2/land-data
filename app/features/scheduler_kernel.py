@@ -50,30 +50,51 @@ def execute_job(job_func: Callable, job_name: str, **kwargs):
 
 # --- 🚀 스케줄러 실행을 위한 전역 래퍼 함수 (Top-level Functions) ---
 
+def job_location_raw_address_db():
+    """주소DB 전체분 다운로드 및 압축해제 (00:00)"""
+    from app.features.location.raw.command import LocationRawCommand
+    execute_job(LocationRawCommand().handle_address_db, "도로명주소 원천 DB 다운로드 및 갱신")
+
+def job_location_raw_road_address_sync():
+    """도로명주소 마스터 임포트 (01:00)"""
+    from app.features.location.raw.command import LocationRawCommand
+    execute_job(LocationRawCommand().handle_road_address, "도로명주소(건물) 마스터 데이터 임포트")
+
+def job_location_raw_block_address_sync():
+    """관련지번 마스터 임포트 (02:00)"""
+    from app.features.location.raw.command import LocationRawCommand
+    execute_job(LocationRawCommand().handle_block_address, "관련지번 마스터 데이터 임포트")
+
+def job_location_raw_building_group_sync():
+    """부가정보(건물군) 마스터 임포트 (03:00)"""
+    from app.features.location.raw.command import LocationRawCommand
+    execute_job(LocationRawCommand().handle_building_group, "주소 부가정보 마스터 데이터 임포트")
+
 def job_boundary_update():
-    """지역 경계 데이터 업데이트 래퍼"""
+    """지역 경계 데이터 업데이트 (기본 00:00)"""
     from app.features.location.boundary.command import BoundaryCommand
     execute_job(BoundaryCommand().write_boundary_all, "지역경계 데이터 일일 업데이트")
 
 def job_building_raw_sync():
-    """건축물대장 원천 데이터 동기화 래퍼"""
+    """건축물대장 원천 데이터 동기화 (기본 01:00)"""
     from app.features.building.raw.command import BuildingRawCommand
     execute_job(BuildingRawCommand().handle_sync_all, "건축물대장 전체 정보 일괄 수집", is_continue=True, is_renew=True)
 
 def job_location_raw_basic_sync():
-    """주소 마스터 동기화 래퍼"""
+    """주소 마스터 동기화 (기본 02:00)"""
     from app.features.location.raw.command import LocationRawCommand
-    execute_job(LocationRawCommand().handle_sync_all(), "기본개요 기반 주소 동기화", is_continue=False, is_renew=False)
+    execute_job(LocationRawCommand().handle_sync_all, "기본개요 기반 주소 동기화", is_continue=False, is_renew=False)
 
 def job_building_structure_address_build():
-    """공간정보 빌드 래퍼"""
+    """공간정보 빌드 (기본 03:00)"""
     from app.features.building.structure.command import StructureBuildCommand
     execute_job(StructureBuildCommand().address_handle, "주소 기반 좌표 및 지적도 결합 빌드", is_continue=False, is_renew=False)
 
 def job_building_structure_complex_build():
-    """공간정보 빌드 래퍼"""
+    """공간정보 빌드 (기본 04:00)"""
     from app.features.building.structure.command import StructureBuildCommand
     execute_job(StructureBuildCommand().complex_handle, "주소 기반 단지 빌드", is_continue=False, is_renew=False)
+
 
 @dataclass
 class ScheduleConfig:
@@ -136,13 +157,46 @@ class SchedulerRegistry:
             logger.error(f"❌ 스케줄 등록 실패: {config.name} - {e}")
 
     def register_all(self) -> None:
-        """모든 스케줄 등록 실행"""
+        """모든 스케줄 등록 실행 (기존 시간대 유지 + 신규 작업 추가)"""
         logger.info(f"스케줄링 작업 등록 시작 (환경: {self.current_env})")
 
+        # --- 🚀 신규 추가 작업 (주소 원천 데이터) ---
+        self.register(ScheduleConfig(
+            func=job_location_raw_address_db,
+            trigger='cron', hour=0, minute=0,
+            job_id='location_raw_address_db_sync',
+            name='도로명주소 원천 DB 다운로드 및 갱신',
+            environments=['development', 'production']
+        ))
+
+        self.register(ScheduleConfig(
+            func=job_location_raw_road_address_sync,
+            trigger='cron', hour=1, minute=0,
+            job_id='location_raw_road_address_sync',
+            name='도로명주소(건물) 마스터 데이터 임포트',
+            environments=['development', 'production']
+        ))
+
+        self.register(ScheduleConfig(
+            func=job_location_raw_block_address_sync,
+            trigger='cron', hour=2, minute=0,
+            job_id='location_raw_block_address_sync',
+            name='관련지번 마스터 데이터 임포트',
+            environments=['development', 'production']
+        ))
+
+        self.register(ScheduleConfig(
+            func=job_location_raw_building_group_sync,
+            trigger='cron', hour=3, minute=0,
+            job_id='location_raw_building_group_sync',
+            name='주소 부가정보 마스터 데이터 임포트',
+            environments=['development', 'production']
+        ))
+
+        # --- 🚀 기존 작업 유지 ---
         self.register(ScheduleConfig(
             func=job_boundary_update,
-            trigger='cron',
-            hour=0, minute=0,
+            trigger='cron', hour=0, minute=0,
             job_id='boundary_daily_update',
             name='지역경계 데이터 일일 업데이트',
             environments=['development', 'production']
@@ -150,8 +204,7 @@ class SchedulerRegistry:
 
         self.register(ScheduleConfig(
             func=job_building_raw_sync,
-            trigger='cron',
-            hour=1, minute=0,
+            trigger='cron', hour=1, minute=0,
             job_id='building_raw_sync_all',
             name='건축물대장 전체 정보 일괄 수집',
             environments=['development', 'production']
@@ -159,8 +212,7 @@ class SchedulerRegistry:
 
         self.register(ScheduleConfig(
             func=job_location_raw_basic_sync,
-            trigger='cron',
-            hour=2, minute=0,
+            trigger='cron', hour=2, minute=0,
             job_id='location_raw_address_basic',
             name='기본개요 기반 주소 동기화',
             environments=['development', 'production']
@@ -168,8 +220,7 @@ class SchedulerRegistry:
 
         self.register(ScheduleConfig(
             func=job_building_structure_address_build,
-            trigger='cron',
-            hour=3, minute=0,
+            trigger='cron', hour=3, minute=0,
             job_id='building_structure_address_build',
             name='주소 기반 좌표 및 지적도 결합 빌드',
             environments=['development', 'production']
@@ -177,8 +228,7 @@ class SchedulerRegistry:
 
         self.register(ScheduleConfig(
             func=job_building_structure_complex_build,
-            trigger='cron',
-            hour=4, minute=0,
+            trigger='cron', hour=4, minute=0,
             job_id='building_structure_complex_build',
             name='주소 기반 단지 정보 빌드',
             environments=['development', 'production']
