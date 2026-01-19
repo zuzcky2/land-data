@@ -262,6 +262,31 @@ class LocationRawCommand(AbstractCommand):
     def handle_address_db(self):
         location_raw_facade.address_db_service.run()
 
+    def handle_road_code(self, is_continue: bool = False, is_renew: bool = False):
+        directory_path = f"{Config.get('app.project_root')}/resources/juso_go_kr/address_db/current"
+        service = location_raw_facade.road_code_service
+
+        self._send_slack("🏘️ 도로코드 마스터 임포트 가동")
+
+        try:
+            # 서비스 내부에서 read()를 통해 가져온 파일 목록
+            files = service.get_import_target_files(directory_path)
+            total_count = 0
+
+            for file_path in files:
+                file_name = os.path.basename(file_path)
+
+                # 서비스 내부에서 read()를 통해 파싱하고 저장
+                saved_count = service.import_single_file(file_path)
+
+                total_count += saved_count
+                self.message(f"  -> 📄 {file_name}: {saved_count}건 저장 완료", fg='white')
+
+            self._send_slack(f"✨ 전체 임포트 종료 (총 {total_count}건)")
+
+        except Exception as e:
+            self._handle_error(e, "도로코드 임포트 중단")
+
 
     def register_commands(self, cli_group):
         """Sync 관련 CLI 명령어 등록"""
@@ -290,23 +315,29 @@ class LocationRawCommand(AbstractCommand):
         def sync_all_cmd(is_continue, is_renew):
             self.handle_sync_all(is_continue, is_renew)
 
-        @cli_group.command('location_raw:block_address_all')
+        @cli_group.command('location_raw:block_address')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_block_address(is_continue, is_renew):
             self.handle_block_address(is_continue, is_renew)
 
-        @cli_group.command('location_raw:road_address_all')
+        @cli_group.command('location_raw:road_address')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_road_address(is_continue, is_renew):
             self.handle_road_address(is_continue, is_renew)
 
-        @cli_group.command('location_raw:building_group_all')
+        @cli_group.command('location_raw:building_group')
         @click.option('--continue', 'is_continue', is_flag=True)
         @click.option('--renew', 'is_renew', is_flag=True)
         def sync_building_group(is_continue, is_renew):
             self.handle_building_group(is_continue, is_renew)
+
+        @cli_group.command('location_raw:road_code')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_road_code(is_continue, is_renew):
+            self.handle_road_code(is_continue, is_renew)
 
         @cli_group.command('location_raw:address_db')
         def sync_address_db():

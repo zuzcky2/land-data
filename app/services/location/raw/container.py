@@ -13,12 +13,15 @@ from app.services.location.raw.drivers.point_geometry.point_geometry_mongodb_dri
 from app.services.location.raw.drivers.point_geometry.point_geometry_vworld_driver import PointGeometryVworldDriver
 from app.services.location.raw.drivers.road_address.road_address_mongodb_driver import RoadAddressMongodbDriver
 from app.services.location.raw.drivers.road_address.road_address_text_driver import RoadAddressTextDriver
+from app.services.location.raw.drivers.road_code.road_code_mongodb_driver import RoadCodeMongodbDriver
+from app.services.location.raw.drivers.road_code.road_code_text_driver import RoadCodeTextDriver
 from app.services.location.raw.managers.address_manager import AddressManager
 from app.services.location.raw.managers.block_address_manager import BlockAddressManager
 from app.services.location.raw.managers.building_group_manager import BuildingGroupManager
 from app.services.location.raw.managers.continuous_geometry_manager import ContinuousGeometryManager
 from app.services.location.raw.managers.point_geometry_manager import PointGeometryManager
 from app.services.location.raw.managers.road_address_manager import RoadAddressManager
+from app.services.location.raw.managers.road_code_manager import RoadCodeManager
 from app.services.location.raw.services.address_db_download_service import AddressDBDownloadService
 from app.services.location.raw.services.address_service import AddressService
 from app.services.location.raw.services.block_address_service import BlockAddressService
@@ -26,6 +29,7 @@ from app.services.location.raw.services.building_group_service import BuildingGr
 from app.services.location.raw.services.continuous_geometry_service import ContinuousGeometryService
 from app.services.location.raw.services.point_geometry_service import PointGeometryService
 from app.services.location.raw.services.road_address_service import RoadAddressService
+from app.services.location.raw.services.road_code_service import RoadCodeService
 
 
 class RawContainer(AbstractContainer):
@@ -82,5 +86,14 @@ class RawContainer(AbstractContainer):
         mongodb_driver=building_group_mongodb_driver
     )
     building_group_service: BuildingGroupService = providers.Singleton(BuildingGroupService, manager=building_group_manager)
+
+    road_code_text_driver: RoadCodeTextDriver = providers.Factory(RoadCodeTextDriver)
+    road_code_mongodb_driver: RoadCodeMongodbDriver = providers.Factory(RoadCodeMongodbDriver)
+    road_code_manager: RoadCodeManager = providers.Singleton(
+        RoadCodeManager,
+        text_driver=road_code_text_driver,
+        mongodb_driver=road_code_mongodb_driver,
+    )
+    road_code_service: RoadCodeService = providers.Singleton(RoadCodeService, manager=road_code_manager)
 
     address_db_service: AddressDBDownloadService = providers.Singleton(AddressDBDownloadService)

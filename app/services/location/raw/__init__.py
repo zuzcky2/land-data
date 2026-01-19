@@ -9,6 +9,7 @@ from app.services.location.raw.services.building_group_service import BuildingGr
 from app.services.location.raw.services.continuous_geometry_service import ContinuousGeometryService
 from app.services.location.raw.services.point_geometry_service import PointGeometryService
 from app.services.location.raw.services.road_address_service import RoadAddressService
+from app.services.location.raw.services.road_code_service import RoadCodeService
 
 
 @dataclass
@@ -17,6 +18,7 @@ class RawFacade:
     block_address_service: BlockAddressService
     road_address_service: RoadAddressService
     building_group_service: BuildingGroupService
+    road_code_service: RoadCodeService
     address_db_service: AddressDBDownloadService
     continuous_geometry_service: ContinuousGeometryService
     point_geometry_service: PointGeometryService
@@ -27,6 +29,7 @@ def get_service(
     _block_address_service: BlockAddressService = Provide[RawContainer.block_address_service],
     _road_address_service: RoadAddressService = Provide[RawContainer.road_address_service],
     _building_group_service: BuildingGroupService = Provide[RawContainer.building_group_service],
+    _road_code_service: RoadCodeService = Provide[RawContainer.road_code_service],
     _address_db_service: AddressDBDownloadService = Provide[RawContainer.address_db_service],
     _continuous_geometry_service: ContinuousGeometryService = Provide[RawContainer.continuous_geometry_service],
     _point_geometry_service: PointGeometryService = Provide[RawContainer.point_geometry_service],
@@ -36,6 +39,7 @@ def get_service(
         block_address_service=_block_address_service,
         road_address_service=_road_address_service,
         building_group_service=_building_group_service,
+        road_code_service=_road_code_service,
         address_db_service=_address_db_service,
         continuous_geometry_service=_continuous_geometry_service,
         point_geometry_service=_point_geometry_service

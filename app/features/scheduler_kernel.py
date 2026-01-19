@@ -70,6 +70,11 @@ def job_location_raw_building_group_sync():
     from app.features.location.raw.command import LocationRawCommand
     execute_job(LocationRawCommand().handle_building_group, "주소 부가정보 마스터 데이터 임포트")
 
+def job_location_raw_road_code_sync():
+    """도로명 코드 마스터 임포트 (03:00)"""
+    from app.features.location.raw.command import LocationRawCommand
+    execute_job(LocationRawCommand().handle_road_code(), "도로명 코드 마스터 데이터 임포트")
+
 def job_boundary_update():
     """지역 경계 데이터 업데이트 (기본 00:00)"""
     from app.features.location.boundary.command import BoundaryCommand
@@ -166,6 +171,14 @@ class SchedulerRegistry:
             trigger='cron', hour=0, minute=0,
             job_id='location_raw_address_db_sync',
             name='도로명주소 원천 DB 다운로드 및 갱신',
+            environments=['development', 'production']
+        ))
+
+        self.register(ScheduleConfig(
+            func=job_location_raw_road_code_sync,
+            trigger='cron', hour=0, minute=30,
+            job_id='job_location_raw_road_code_sync',
+            name='도로 코드 마스터 데이터 임포트',
             environments=['development', 'production']
         ))
 
