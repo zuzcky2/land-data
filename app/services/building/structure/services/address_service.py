@@ -30,8 +30,6 @@ class AddressService(AbstractService):
         self._raw_address_service = raw_address_service
         self._raw_point_geometry_service = raw_point_geometry_service
         self._raw_continuous_geometry_service = raw_continuous_geometry_service
-
-        # 🚀 메모리 캐시 저장소 초기화
         self._boundary_cache: Dict[str, BoundaryItemDto] = {}
 
     @property
@@ -42,151 +40,123 @@ class AddressService(AbstractService):
     def manager(self) -> AddressManager:
         return self._manager
 
-    def build_by_bd_mgt_sn(self, bd_mgt_sn: str) -> Optional[AddressDto]:
-        address_raw = self._raw_address_service.get_detail({'bdMgtSn': bd_mgt_sn})
-        if not address_raw:
-            Log.get_logger(self.logger_name).warning(f"Raw address not found for: {bd_mgt_sn}")
-            return None
-
-        return self.build_by_address_raw(address_raw)
-
     def build_by_address_raw(self, address_raw: Dict[str, Any]) -> Optional[AddressDto]:
-        bd_mgt_sn = address_raw.get('bdMgtSn')
-        if not bd_mgt_sn:
-            return None
-
-        return self._run_build_pipeline(address_raw, bd_mgt_sn)
-
-    def _run_build_pipeline(self, address_raw: Dict[str, Any], bd_mgt_sn: str) -> Optional[AddressDto]:
-        # 전체 시작 시간 측정
-        start_all = time.time()
-
         now = datetime.now()
         role_date = now - timedelta(days=7)
 
-        # 1. 기존 데이터 확인 구간
-        t_start_read = time.time()
-        address = self.manager.driver(self.DRIVER_MONGODB).set_arguments({
-            'building_manage_number': bd_mgt_sn,
+        road_address_node = address_raw.get('road_address', {})
+        road_address_id = road_address_node.get('road_address_id')
+
+        if not road_address_id:
+            return None
+
+        address_exist = self.manager.driver(self.DRIVER_MONGODB).set_arguments({
+            'building_manage_number': road_address_id,
             'updated_at': {'$gt': role_date}
         }).read_one()
-        t_end_read = time.time()
 
-        if address:
-            return AddressDto(**address)
+        if address_exist:
+            return AddressDto(**address_exist)
 
         try:
-            # 2. 행정구역 정보 확보 구간
-            t_start_boundary = time.time()
-            state_boundary = self._get_cache_boundary(bd_mgt_sn[:2], 'state')
-            district_boundary = self._get_cache_boundary(bd_mgt_sn[:5], 'district')
+            state_boundary = self._get_cache_boundary(road_address_id[:2], 'state')
+            district_boundary = self._get_cache_boundary(road_address_id[:5], 'district')
 
-            if not district_boundary:
-                fallback_sigungu = address_raw.get('admCd', '')[:5]
-                legal_code = fallback_sigungu + bd_mgt_sn[5:]
-                district_boundary = self._get_cache_boundary(legal_code[:5], 'district')
-                township_boundary = self._get_cache_boundary(legal_code[:8], 'township')
-                village_boundary = self._get_cache_boundary(legal_code[:10], 'village')
-            else:
-                township_boundary = self._get_cache_boundary(bd_mgt_sn[:8], 'township')
-                village_boundary = self._get_cache_boundary(bd_mgt_sn[:10], 'village')
-            t_end_boundary = time.time()
+            # 🚀 지번, PNU 리스트 생성
+            raw_blocks = road_address_node.get('block_addresses', [])
+            parcel_addresses = []
+            pnu_list = []
+            processed_blocks_data = []
 
-            if not state_boundary or not district_boundary or not township_boundary:
-                return None
+            for rb in raw_blocks:
+                bjd = rb.get('bjd_code', '')
+                bmain = str(rb.get('lnbr_mnnm', ''))
+                bsub = str(rb.get('lnbr_slno', ''))
 
-            # 3. 좌표(Point) 수집 구간 (외부 API 호출 예상)
-            t_start_point = time.time()
-            road_query = f"{address_raw.get('rn', '')} {address_raw.get('buldMnnm', '')}"
-            if address_raw.get('buldSlno') and str(address_raw['buldSlno']).strip() not in ['', '0']:
-                road_query += f"-{address_raw['buldSlno']}"
+                # PNU 생성 및 리스트 추가
+                pnu = bjd + (rb.get('mountain_yn') or '0') + bmain.zfill(4) + bsub.zfill(4)
+                pnu_list.append(pnu)
 
+                # 검색용 지번 주소 생성
+                block_suffix = self._combine_num(bmain, bsub)
+                full_parcel = f"{district_boundary.item_full_name if district_boundary else ''} {rb.get('emd_nm', '')} {block_suffix}".strip()
+                parcel_addresses.append(full_parcel)
+
+                processed_blocks_data.append({
+                    'raw': rb,
+                    'township': self._get_cache_boundary(bjd[:8], 'township'),
+                    'village': self._get_cache_boundary(bjd, 'village') if len(bjd) >= 10 else None
+                })
+
+            road_suffix = self._combine_num(road_address_node.get('build_mnnm'), road_address_node.get('build_slno'))
+            road_query = f"{address_raw.get('road_nm', '')} {road_suffix}".strip()
+            road_full_address = f"{district_boundary.item_full_name if district_boundary else ''} {road_query}"
+
+            # 🚀 pnu_list 추가 전달
             point_pagination = self._raw_point_geometry_service.get_list_by_chain({
-                'pnu': bd_mgt_sn[:19],
-                'bd_mgt_sn': bd_mgt_sn,
-                'updated_at': {'$gt': role_date},
+                'bd_mgt_sn': road_address_id,
+                'road_full_address': road_full_address,
+                'parcel_addresses': parcel_addresses,
+                'pnu_list': pnu_list,
                 'query': road_query,
-                'road_full_address': address_raw.get('roadAddr'),
-                'parcel_address': f"{address_raw.get('emdNm')} {address_raw.get('lnbrMnnm')}-{address_raw.get('lnbrSlno')}",
                 'bbox': district_boundary.bbox,
                 'page': 1,
-                'per_page': 100
+                'per_page': 10
             })
-            t_end_point = time.time()
 
-            # 4. 지적도(Continuous) 수집 루프 구간 (가장 유력한 병목 지점)
-            t_start_loop = time.time()
-            point_items = getattr(point_pagination, 'items', [])
+            # 🛡️ point_pagination이 None일 경우를 대비한 방어 로직
+            if not point_pagination:
+                Log.get_logger(self.logger_name).warning(f"Point pagination returned None for [{road_address_id}]")
+                # 필요시 여기서 빈 DTO를 만들거나 return None 처리
+                point_items = []
+            else:
+                point_items = getattr(point_pagination, 'items', [])
+
             continuous_items = []
-            for point_item in point_items:
-                pt = point_item.get('point', {})
-                if not pt.get('x') or not pt.get('y'): continue
+            for pt_item in point_items:
+                pt = pt_item.get('point', {})
+                # 좌표가 없는 경우 건너뜀
+                if not pt.get('x') or not pt.get('y'):
+                    continue
 
                 continuous = self._raw_continuous_geometry_service.get_detail_by_chain({
-                    'id': point_item.get('continuous_id'),
-                    'bdMgtSn': bd_mgt_sn,
-                    'updated_at': {'$gt': role_date},
-                    'latitude': float(pt['x']),
-                    'longitude': float(pt['y'])
+                    'id': pt_item.get('continuous_id'),
+                    'bdMgtSn': road_address_id,
+                    'latitude': float(pt.get('x', 0)),
+                    'longitude': float(pt.get('y', 0))
                 })
                 if continuous and 'id' in continuous:
                     continuous_items.append(continuous)
-            t_end_loop = time.time()
 
-            # 5. 핸들러 및 최종 저장 구간
-            t_start_final = time.time()
             dto = self.address_dto_handler.handle(
                 address_raw=address_raw,
+                processed_blocks_data=processed_blocks_data,
                 continuous_items=continuous_items,
                 state_boundary=state_boundary,
-                district_boundary=district_boundary,
-                township_boundary=township_boundary,
-                village_boundary=village_boundary
+                district_boundary=district_boundary
             )
 
             if dto:
                 self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
-            t_end_final = time.time()
-
-            # ⏱️ 성능 리포트 출력
-            total_elapsed = time.time() - start_all
-            # 0.5초 이상 걸리는 경우에만 상세 로그 남김 (조절 가능)
-            if total_elapsed > 0.5:
-                Log.get_logger(self.logger_name).info(
-                    f"⏱️ Slow Build [{bd_mgt_sn}] - {total_elapsed:.3f}s\n"
-                    f"   1. DB Read: {t_end_read - t_start_read:.3f}s\n"
-                    f"   2. Boundary: {t_end_boundary - t_start_boundary:.3f}s\n"
-                    f"   3. Point API: {t_end_point - t_start_point:.3f}s\n"
-                    f"   4. Cont. Loop: {t_end_loop - t_start_loop:.3f}s (Items: {len(point_items)})\n"
-                    f"   5. Handle & Store: {t_end_final - t_start_final:.3f}s"
-                )
 
             return dto
 
         except Exception as e:
-            Log.get_logger(self.logger_name).error(f"Build Pipeline Error [{bd_mgt_sn}]: {str(e)}")
+            Log.get_logger(self.logger_name).error(f"Build Error [{road_address_id}]: {str(e)}", exc_info=True)
             return None
 
-    # --- 💡 캐싱 헬퍼 메서드 ---
-
     def _get_cache_boundary(self, item_code: str, location_type: str) -> Optional[BoundaryItemDto]:
-        """시군구 단위 BBOX 캐싱"""
+        if not item_code: return None
         if item_code not in self._boundary_cache:
-            boundary = self._boundary_service.get_boundary({
+            self._boundary_cache[item_code] = self._boundary_service.get_boundary({
                 'item_code': item_code,
                 'location_type': location_type,
                 'use_polygon': False
             })
-            # 결과가 없더라도 반복 조회를 방지하기 위해 None 저장
-            self._boundary_cache[item_code] = boundary
-
-            # 캐시가 너무 커지는 것을 방지 (간단한 클린업 로직 필요 시 추가)
-            if len(self._boundary_cache) > 6000:
-                self._boundary_cache.clear()
-
         return self._boundary_cache[item_code]
 
-
-    def clear_internal_cache(self):
-        """메모리 캐시 강제 초기화 (필요 시 호출)"""
-        self._boundary_cache.clear()
+    def _combine_num(self, main: Any, sub: Any) -> str:
+        m = str(main or '').strip()
+        s = str(sub or '').strip()
+        if not m: return ""
+        return m if not s or s in ['0', '0000'] else f"{m}-{s}"

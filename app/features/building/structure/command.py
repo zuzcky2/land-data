@@ -24,10 +24,6 @@ class StructureBuildCommand(AbstractCommand):
             logger_name = f"{structure_facade.address_service.logger_name}_build"
             build_logger = Log.get_logger(logger_name)
 
-            bd_mgt_sn = item.get('bdMgtSn')
-            if not bd_mgt_sn:
-                return {'success': False, 'id': current_id, 'error': 'No bdMgtSn'}
-
             # 실제 빌드 서비스 호출
             result = structure_facade.address_service.build_by_address_raw(item)
 
@@ -50,7 +46,7 @@ class StructureBuildCommand(AbstractCommand):
             else:
                 return {'success': False, 'id': current_id, 'error': 'Location service facade is None'}
 
-            build_logger.info(f"Sync Start: {{'_id': '{str(current_id)}', 'bdMgtSn': '{bd_mgt_sn}'}}")
+            build_logger.info(f"Sync Start: {{'_id': '{str(current_id)}', 'bdMgtSn': '{item['address_id']}'}}")
             return {'success': True, 'id': current_id}
 
         except Exception as e:
@@ -61,8 +57,9 @@ class StructureBuildCommand(AbstractCommand):
 
     def address_handle(self, is_continue: bool = False, is_renew: bool = False):
         """building_structure:address 명령어의 실제 구현부"""
-        service = location_raw_facade.address_service
-        per_page = 10000
+        service = location_raw_facade.road_code_service
+        page = 1
+        per_page = 100
         total_count = 0
         last_id = None
 
@@ -85,21 +82,7 @@ class StructureBuildCommand(AbstractCommand):
         try:
             with Pool(processes=4) as pool:
                 while True:
-                    query_params = {
-                        '$or': [
-                            {'updated_at': {'lt': role_date}},
-                            {'address_id': {'$exists': False}},
-                            {'address_id': None}
-                        ],
-                        'dead': {'$ne': True},
-                        'page': 1,
-                        'per_page': per_page,
-                        'sort': [('_id', 1)]
-                    }
-                    if last_id:
-                        query_params['_id'] = {'$gt': last_id}
-
-                    address_pagination = service.get_list(query_params)
+                    address_pagination = service.get_road_code_aggregate(page, per_page)
 
                     items = getattr(address_pagination, 'items', [])
 
@@ -118,6 +101,7 @@ class StructureBuildCommand(AbstractCommand):
                     last_item = items[-1]
                     last_id = last_item['_id']
                     total_count += len(items)
+                    page = page + 1
 
                     self.message(
                         f"  -> {total_count}건 처리 중... (성공: {chunk_success_count}/{len(items)}, ID: {last_id})",

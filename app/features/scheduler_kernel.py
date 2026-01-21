@@ -85,10 +85,10 @@ def job_building_raw_sync():
     from app.features.building.raw.command import BuildingRawCommand
     execute_job(BuildingRawCommand().handle_sync_all, "건축물대장 전체 정보 일괄 수집", is_continue=True, is_renew=True)
 
-def job_location_raw_basic_sync():
-    """주소 마스터 동기화 (기본 02:00)"""
-    from app.features.location.raw.command import LocationRawCommand
-    execute_job(LocationRawCommand().handle_sync_all, "기본개요 기반 주소 동기화", is_continue=False, is_renew=False)
+# def job_location_raw_basic_sync():
+#     """주소 마스터 동기화 (기본 02:00)"""
+#     from app.features.location.raw.command import LocationRawCommand
+#     execute_job(LocationRawCommand().handle_sync_all, "기본개요 기반 주소 동기화", is_continue=False, is_renew=False)
 
 def job_building_structure_address_build():
     """공간정보 빌드 (기본 03:00)"""
@@ -223,13 +223,13 @@ class SchedulerRegistry:
             environments=['development', 'production']
         ))
 
-        self.register(ScheduleConfig(
-            func=job_location_raw_basic_sync,
-            trigger='cron', hour=2, minute=0,
-            job_id='location_raw_address_basic',
-            name='기본개요 기반 주소 동기화',
-            environments=['development', 'production']
-        ))
+        # self.register(ScheduleConfig(
+        #     func=job_location_raw_basic_sync,
+        #     trigger='cron', hour=2, minute=0,
+        #     job_id='location_raw_address_basic',
+        #     name='기본개요 기반 주소 동기화',
+        #     environments=['development', 'production']
+        # ))
 
         self.register(ScheduleConfig(
             func=job_building_structure_address_build,

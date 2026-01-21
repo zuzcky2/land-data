@@ -6,7 +6,7 @@ from app.core.helpers.log import Log
 
 class PointGeometryService(AbstractService):
 
-    def __init__(self, manager: Any):  # Manager 타입은 주입에 따라 유동적
+    def __init__(self, manager: Any):
         self._manager = manager
 
     @property
@@ -21,48 +21,53 @@ class PointGeometryService(AbstractService):
         mongodb_driver = self.manager.driver(self.DRIVER_MONGODB)
         bd_mgt_sn = params.get('bd_mgt_sn')
 
-        # 1. 로컬 DB 조회 (updated_at 인덱스 활용으로 이미 7일 필터링됨)
         pagination = mongodb_driver.clear().set_pagination(
             params['page'], params['per_page']).set_arguments({
             'bdMgtSn': bd_mgt_sn,
             'updated_at': params.get('updated_at')
         }).read()
 
-        items = getattr(pagination, 'items', [])
+        items = pagination.items
 
-        # 2. 데이터가 없거나 만료된 경우만 VWorld 호출
-        # (is_expired 호출을 제거하고 쿼리 결과가 없으면 바로 VWorld 실행)
         if not items:
             vworld_driver = self.manager.driver(self.DRIVER_VWORLD)
 
-            # API 호출 (이 구간이 1.2초 소요됨)
             vworld_pagination = vworld_driver.clear().set_arguments({
                 'query': params.get('query'),
                 'bbox': params.get('bbox')
             }).read()
 
             valid_items = []
-            target_pnu = params.get('pnu')
-            target_road = params.get('road_full_address')
-            target_parcel = params.get('parcel_address')
+            # 🚀 pnu_list 배열 수신
+            target_pnu_list = params.get('pnu_list') or []
+            target_road = params.get('road_full_address') or ""
+            target_parcels = params.get('parcel_addresses') or []
 
             for item in getattr(vworld_pagination, 'items', []):
                 addr = item.get('address', {})
-                # 매칭 조건 최적화
-                is_match = (
-                        item.get('id') == target_pnu or
-                        addr.get('road') == target_road or
-                        addr.get('parcel') == target_parcel
-                )
+                v_id = item.get('id', '')
+                v_road = addr.get('road', '')
+                v_parcel = addr.get('parcel', '')
 
-                if is_match:
+                # --- 🚀 매칭 조건 최적화 ---
+
+                # A. PNU 리스트 중 하나라도 일치하는지 확인
+                pnu_match = (v_id and v_id in target_pnu_list)
+
+                # B. 도로명 주소 포함 여부 (VWorld 결과가 요청 주소를 포함하는지)
+                road_match = (target_road and target_road in v_road)
+
+                # C. 지번 주소 리스트 중 하나라도 일치하는지 확인
+                parcel_match = (v_parcel and v_parcel in target_parcels)
+
+                if pnu_match or road_match or parcel_match:
                     pt = item.get('point', {})
                     x, y = pt.get('x'), pt.get('y')
 
-                    # 데이터 구조 정리
                     item.update({
                         'bdMgtSn': bd_mgt_sn,
-                        'manage_id': f"{bd_mgt_sn}_{x}_{y}"
+                        'manage_id': f"{bd_mgt_sn}_{x}_{y}",
+                        'updated_at': params.get('updated_at') or ""
                     })
                     valid_items.append(item)
 
@@ -73,15 +78,12 @@ class PointGeometryService(AbstractService):
         return pagination
 
     def sync_from_vworld(self, params: Dict[str, Any], source: str = 'group') -> Dict[str, Any]:
-        """외부 호출용 동기화 엔드포인트"""
         current_logger = Log.get_logger(f"{self.logger_name}_{source}")
         current_logger.info(f"Sync Start: {params}")
 
         try:
-            # Point 데이터는 목록을 반환하므로 list_by_chain 호출
             pagination = self.get_list_by_chain(params)
-
-            if pagination.items:
+            if pagination and getattr(pagination, 'items', []):
                 return {'status': 'success', 'count': len(pagination.items)}
 
             return {'status': 'fail', 'dead': True}
