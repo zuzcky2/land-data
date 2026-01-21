@@ -1,6 +1,7 @@
 from app.services.contracts.dto import PaginationDto
 from app.services.location.raw.managers.road_address_manager import RoadAddressManager
 from app.services.location.raw.services.abstract_address_service import AbstractAddressService
+from datetime import datetime, timedelta
 
 class RoadCodeService(AbstractAddressService):
     def __init__(self, manager: RoadAddressManager):
@@ -18,16 +19,30 @@ class RoadCodeService(AbstractAddressService):
         # 페이지네이션을 위한 skip 계산
         driver = self.manager.mongodb_driver
 
-        total = driver._get_total_count()
+        now = datetime.now()
+        role_date = now - timedelta(days=7)
+
+        match = {
+            '$or': [
+                {'updated_at': {'$gt': role_date}},
+                {'address_id': {'$exists': False}}
+            ],
+            'dead': {'$ne': True},
+        }
+
+        total = driver.set_arguments(match)._get_total_count()
 
         skip_count = (page - 1) * per_page
 
         pipeline = [
+            {
+                '$match': match
+            },
             # 2. 페이지네이션을 위한 정렬 및 제한 단계 추가
             # 💡 정렬은 페이지네이션 결과의 일관성을 위해 반드시 필요함
             {
                 '$sort': {
-                    'road_code': 1  # 또는 원하는 정렬 기준
+                    'road_code_id': 1  # 또는 원하는 정렬 기준
                 }
             },
             {

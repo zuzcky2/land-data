@@ -42,7 +42,11 @@ class StructureBuildCommand(AbstractCommand):
                 item['dead'] = True
 
             if location_raw_facade and location_raw_facade.address_service:
-                location_raw_facade.address_service.manager.driver('mongodb').store([item])
+                location_raw_facade.road_code_service.manager.driver('mongodb').store([{
+                    'road_code_id': item['road_code_id'],
+                    'address_id': item['address_id'],
+                    'dead': item['dead']
+                }])
             else:
                 return {'success': False, 'id': current_id, 'error': 'Location service facade is None'}
 
@@ -59,7 +63,7 @@ class StructureBuildCommand(AbstractCommand):
         """building_structure:address 명령어의 실제 구현부"""
         service = location_raw_facade.road_code_service
         page = 1
-        per_page = 100
+        per_page = 10000
         total_count = 0
         last_id = None
 
