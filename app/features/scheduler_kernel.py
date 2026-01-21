@@ -239,13 +239,13 @@ class SchedulerRegistry:
             environments=['development', 'production']
         ))
 
-        self.register(ScheduleConfig(
-            func=job_building_structure_complex_build,
-            trigger='cron', hour=4, minute=0,
-            job_id='building_structure_complex_build',
-            name='주소 기반 단지 정보 빌드',
-            environments=['development', 'production']
-        ))
+        # self.register(ScheduleConfig(
+        #     func=job_building_structure_complex_build,
+        #     trigger='cron', hour=4, minute=0,
+        #     job_id='building_structure_complex_build',
+        #     name='주소 기반 단지 정보 빌드',
+        #     environments=['development', 'production']
+        # ))
 
 
 # --- 🛠️ 유틸리티 함수 및 외부 노출 ---
