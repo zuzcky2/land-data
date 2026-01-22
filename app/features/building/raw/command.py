@@ -156,6 +156,132 @@ class BuildingRawCommand(AbstractCommand):
         self.message('🏁 모든 데이터 수집 대장정 완료!', fg='blue')
         self._send_slack("🏁 건축물대장 모든 데이터 수집 대장정 완료")
 
+    def handle_kapt_list(self, is_continue: bool = False, is_renew: bool = False):
+        """
+        K-APT 단지 목록을 페이지 단위로 강제 순회하며 수집합니다.
+        법정동 조회 없이 순수 페이지네이션으로 동작합니다.
+        """
+        service = raw_facade.kapt_list_service
+        self._send_slack(f"🚀 [{service.logger_name}] K-APT 목록 수집 시작")
+
+        try:
+            current_page = 1
+            per_page = 1000
+            total_count = 0
+
+            # 1. 이어하기 로직 (로그에서 마지막 처리된 페이지 추출)
+            if is_continue:
+                renew_threshold = 7 if is_renew else 9999
+                last_point = self._get_last_sync_point(service, renew_days=renew_threshold)
+
+                if last_point and 'page' in last_point:
+                    current_page = int(last_point['page'])
+                    self.message(f"🔄 이어하기: {current_page} 페이지부터 재개합니다.", fg='magenta')
+
+            self.message(f'🏢 K-APT 모든 단지 목록 수집을 시작합니다. (Start Page: {current_page})', fg='green')
+
+            while True:
+                # 2. API 호출 (page, numOfRows)
+                # AbstractService의 sync_from_dgk가 내부적으로 API를 쏘고 결과를 저장한다고 가정
+                sync_result = service.sync_from_dgk({
+                    'page': current_page,
+                    'per_page': per_page
+                })
+
+                if sync_result.get('status') == 'error':
+                    self.message(f"❌ {current_page}페이지에서 에러 발생", fg='red')
+                    break
+
+                items_count = sync_result.get('count', 0)
+                total_count += items_count
+
+                if items_count > 0:
+                    self.message(f"  -> {current_page}p: {items_count}건 수집 완료 (누적: {total_count})", fg='white')
+
+                # 3. 탈출 조건 (더 이상 데이터가 없거나 마지막 페이지인 경우)
+                if items_count == 0 or items_count < per_page:
+                    self.message(f"🏁 수집 종료: 마지막 페이지에 도달했습니다. ({current_page}p)", fg='blue')
+                    break
+
+                # 4. 안전장치 (무한 루프 방지)
+                if current_page > 5000:  # 적정 최대 페이지 설정
+                    break
+
+                current_page += 1
+
+            self._send_slack(f"✅ [{service.logger_name}] 완료 (총 {total_count}개 단지)")
+
+        except Exception as e:
+            self._handle_error(e, f"K-APT 리스트 수집 프로세스 중단 @see {__file__}")
+
+    def handle_kapt_children(self, is_continue: bool, is_renew: bool, service: AbstractService):
+        """
+        K-APT 리스트를 순회하며 상세 수집 여부 플래그(detail/basic)를 체크하여 수집합니다.
+        성공 시 마스터 리스트(kapt_list)에 해당 플래그를 true로 업데이트합니다.
+        """
+        self._send_slack(f"🚀 [{service.logger_name}] 데이터 동기화 시작")
+
+        try:
+            current_page = 1
+            per_page = 100
+            total_count = 0
+
+            # 기준 날짜 설정 (7일 전)
+            role_date = datetime.now() - timedelta(days=7)
+
+            # 서비스에 따른 플래그 필드명 결정
+            target_flag_field = 'basic' if service == raw_facade.kapt_basic_service else 'detail'
+
+            self.message(f'🏢 [{service.logger_name}] 플래그 기반 수집을 시작합니다.', fg='green')
+
+            while True:
+                # 1. 쿼리 구성 (해당 플래그가 true가 아니거나, 업데이트된 지 7일 지난 것)
+                query_params = {
+                    'page': current_page,
+                    'per_page': per_page,
+                    '$or': [
+                        {target_flag_field: {'$ne': True}},  # true가 아닌 모든 경우 (None, False, 존재하지 않음)
+                        {'updated_at': {'$lt': role_date}}  # 갱신 주기가 도래한 것
+                    ],
+                    'sort': [('_id', 1)]
+                }
+
+                # 마스터 목록 페이징 호출
+                pagination = raw_facade.kapt_list_service.get_list(query_params, driver_name='mongodb')
+                items = getattr(pagination, 'items', [])
+
+                if not items:
+                    break
+
+                for item in items:
+                    kapt_code = item.get('kaptCode')
+                    if not kapt_code:
+                        continue
+
+                    # 2. API 호출 및 저장 (기존 sync_from_dgk 로직)
+                    sync_result = service.sync_from_dgk({'kaptCode': kapt_code})
+
+                    # 3. 수집 성공 시 마스터 리스트(kapt_list)의 플래그를 true로 갱신
+                    if sync_result.get('status') == 'success':
+                        item[target_flag_field] = True
+                        item['updated_at'] = datetime.now()
+
+                        # 마스터 컬렉션 업데이트
+                        raw_facade.kapt_list_service.manager.driver('mongodb').store([item])
+
+                        total_count += 1
+                        if total_count % 10 == 0:
+                            self.message(f"  -> {total_count}건 처리 완료 ({kapt_code})", fg='white')
+
+                # 처리된 데이터는 쿼리 조건에서 빠지므로 계속 1페이지를 호출
+                if len(items) < per_page:
+                    break
+
+            self._send_slack(f"✅ [{service.logger_name}] 완료 (총 {total_count}건 처리)")
+
+        except Exception as e:
+            self._handle_error(e, f"K-APT 자식 데이터 수집 중단 @see {__file__}")
+
     def register_commands(self, cli_group):
         """CLI 그룹에 명령어 등록"""
 
@@ -183,6 +309,24 @@ class BuildingRawCommand(AbstractCommand):
         def sync_all_cli(is_continue, is_renew):
             # 추출한 공통 메서드 호출
             self.handle_sync_all(is_continue, is_renew)
+
+        @cli_group.command('building_raw:kapt_list')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_kapt_list(is_continue, is_renew):
+            self.handle_kapt_list(is_continue, is_renew)
+
+        @cli_group.command('building_raw:kapt_basic')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_kapt_basic(is_continue, is_renew):
+            self.handle_kapt_children(is_continue, is_renew, service=raw_facade.kapt_basic_service)
+
+        @cli_group.command('building_raw:kapt_detail')
+        @click.option('--continue', 'is_continue', is_flag=True)
+        @click.option('--renew', 'is_renew', is_flag=True)
+        def sync_kapt_basic(is_continue, is_renew):
+            self.handle_kapt_children(is_continue, is_renew, service=raw_facade.kapt_detail_service)
 
 
 __all__ = ['BuildingRawCommand']

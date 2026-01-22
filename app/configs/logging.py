@@ -79,6 +79,10 @@ configs: dict = {
     'building_raw_relation_info': _create_logging_config('building_raw_relation_info', 'building_raw/building_raw_relation_info.log'),
     'building_raw_zone_info': _create_logging_config('building_raw_zone_info', 'building_raw/building_raw_zone_info.log'),
 
+    'building_raw_kapt_list': _create_logging_config('building_raw_kapt_list', 'building_raw/building_raw_kapt_list.log'),
+    'building_raw_kapt_basic': _create_logging_config('building_raw_kapt_basic', 'building_raw/building_raw_kapt_basic.log'),
+    'building_raw_kapt_detail': _create_logging_config('building_raw_kapt_detail', 'building_raw/building_raw_kapt_detail.log'),
+
     'location_raw_address': _create_logging_config('location_raw_address', 'location_raw/address_service.log'),
     'location_raw_address_group': _create_logging_config('location_raw_address_group', 'location_raw/address_group.log'),
     'location_raw_address_title': _create_logging_config('location_raw_address_title', 'location_raw/address_title.log'),

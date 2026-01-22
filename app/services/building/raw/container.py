@@ -9,6 +9,12 @@ from app.services.building.raw.drivers.floor_info.floor_info_dgk import FloorInf
 from app.services.building.raw.drivers.floor_info.floor_info_mongodb import FloorInfoMongodbDriver
 from app.services.building.raw.drivers.group_info.group_info_dgk import GroupInfoDgkDriver
 from app.services.building.raw.drivers.group_info.group_info_mongodb import GroupInfoMongodbDriver
+from app.services.building.raw.drivers.kapt_basic.kapt_basic_dgk_driver import KaptBasicDgkDriver
+from app.services.building.raw.drivers.kapt_basic.kapt_basic_mongodb import KaptBasicMongodbDriver
+from app.services.building.raw.drivers.kapt_detail.kapt_detail_dgk_driver import KaptDetailDgkDriver
+from app.services.building.raw.drivers.kapt_detail.kapt_detail_mongodb import KaptDetailMongodbDriver
+from app.services.building.raw.drivers.kapt_list.kapt_list_dgk_driver import KaptListDgkDriver
+from app.services.building.raw.drivers.kapt_list.kapt_list_mongodb import KaptListMongodbDriver
 from app.services.building.raw.drivers.price_info.price_info_dgk import PriceInfoDgkDriver
 from app.services.building.raw.drivers.price_info.price_info_mongodb import PriceInfoMongodbDriver
 from app.services.building.raw.drivers.relation_info.relation_info_dgk import RelationInfoDgkDriver
@@ -22,6 +28,9 @@ from app.services.building.raw.managers.area_info_manager import AreaInfoManager
 from app.services.building.raw.managers.basic_info_manager import BasicInfoManager
 from app.services.building.raw.managers.floor_info_manager import FloorInfoManager
 from app.services.building.raw.managers.group_info_manager import GroupInfoManager
+from app.services.building.raw.managers.kapt_basic_manager import KaptBasicManager
+from app.services.building.raw.managers.kapt_detail_manager import KaptDetailManager
+from app.services.building.raw.managers.kapt_list_manager import KaptListManager
 from app.services.building.raw.managers.price_info_manager import PriceInfoManager
 from app.services.building.raw.managers.relation_info_manager import RelationInfoManager
 from app.services.building.raw.managers.title_info_manager import TitleInfoManager
@@ -31,6 +40,9 @@ from app.services.building.raw.services.area_info_service import AreaInfoService
 from app.services.building.raw.services.basic_info_service import BasicInfoService
 from app.services.building.raw.services.floor_info_service import FloorInfoService
 from app.services.building.raw.services.group_info_service import GroupInfoService
+from app.services.building.raw.services.kapt_basic_service import KaptBasicService
+from app.services.building.raw.services.kapt_detail_service import KaptDetailService
+from app.services.building.raw.services.kapt_list_service import KaptListService
 from app.services.building.raw.services.price_info_service import PriceInfoService
 from app.services.building.raw.services.relation_info_service import RelationInfoService
 from app.services.building.raw.services.title_info_service import TitleInfoService
@@ -118,3 +130,33 @@ class RawContainer(AbstractContainer):
         mongodb_driver=zone_info_mongodb_driver,
     )
     zone_info_service: ZoneInfoService = providers.Singleton(ZoneInfoService, manager=zone_info_manager)
+
+    kapt_list_dgk_driver: KaptListDgkDriver = providers.Factory(KaptListDgkDriver)
+    kapt_list_mongodb_driver: KaptListMongodbDriver = providers.Factory(KaptListMongodbDriver)
+    kapt_list_manager: KaptListManager = providers.Singleton(
+        KaptListManager,
+        dgk_driver=kapt_list_dgk_driver,
+        mongodb_driver=kapt_list_mongodb_driver,
+    )
+    kapt_list_service: KaptListService = providers.Singleton(
+        KaptListService,
+        manager=kapt_list_manager,
+    )
+
+    kapt_basic_dgk_driver: KaptBasicDgkDriver = providers.Factory(KaptBasicDgkDriver)
+    kapt_basic_mongodb_driver: KaptBasicMongodbDriver = providers.Factory(KaptBasicMongodbDriver)
+    kapt_basic_manager: KaptBasicManager = providers.Singleton(
+        KaptBasicManager,
+        dgk_driver=kapt_basic_dgk_driver,
+        mongodb_driver=kapt_basic_mongodb_driver,
+    )
+    kapt_basic_service: KaptBasicService = providers.Singleton(KaptBasicService, manager=kapt_basic_manager)
+
+    kapt_detail_dgk_driver: KaptDetailDgkDriver = providers.Factory(KaptDetailDgkDriver)
+    kapt_detail_mongodb_driver: KaptDetailMongodbDriver = providers.Factory(KaptDetailMongodbDriver)
+    kapt_detail_manager: KaptDetailManager = providers.Singleton(
+        KaptDetailManager,
+        dgk_driver=kapt_detail_dgk_driver,
+        mongodb_driver=kapt_detail_mongodb_driver,
+    )
+    kapt_detail_service: KaptDetailService = providers.Singleton(KaptDetailService, manager=kapt_detail_manager)

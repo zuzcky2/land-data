@@ -5,6 +5,9 @@ from app.services.building.raw.services.address_info_service import AddressInfoS
 from app.services.building.raw.services.area_info_service import AreaInfoService
 from app.services.building.raw.services.basic_info_service import BasicInfoService
 from app.services.building.raw.services.group_info_service import GroupInfoService
+from app.services.building.raw.services.kapt_basic_service import KaptBasicService
+from app.services.building.raw.services.kapt_detail_service import KaptDetailService
+from app.services.building.raw.services.kapt_list_service import KaptListService
 from app.services.building.raw.services.price_info_service import PriceInfoService
 from app.services.building.raw.services.relation_info_service import RelationInfoService
 from app.services.building.raw.services.title_info_service import TitleInfoService
@@ -24,6 +27,9 @@ class RawFacade:
     address_info_service: AddressInfoService
     relation_info_service: RelationInfoService
     zone_info_service: ZoneInfoService
+    kapt_list_service: KaptListService
+    kapt_basic_service: KaptBasicService
+    kapt_detail_service: KaptDetailService
 
 @inject
 def get_service(
@@ -36,6 +42,9 @@ def get_service(
     _address_info_service: AddressInfoService = Provide[RawContainer.address_info_service],
     _relation_info_service: RelationInfoService = Provide[RawContainer.relation_info_service],
     _zone_info_service: ZoneInfoService = Provide[RawContainer.zone_info_service],
+    _kapt_list_service: KaptListService = Provide[RawContainer.kapt_list_service],
+    _kapt_basic_service: KaptBasicService = Provide[RawContainer.kapt_basic_service],
+    _kapt_detail_service: KaptDetailService = Provide[RawContainer.kapt_detail_service],
 ) -> RawFacade:
     return RawFacade(
         group_info_service=_group_info_service,
@@ -46,7 +55,10 @@ def get_service(
         price_info_service=_price_info_service,
         address_info_service=_address_info_service,
         relation_info_service=_relation_info_service,
-        zone_info_service=_zone_info_service
+        zone_info_service=_zone_info_service,
+        kapt_list_service=_kapt_list_service,
+        kapt_basic_service=_kapt_basic_service,
+        kapt_detail_service=_kapt_detail_service,
     )
 
 # 의존성 주입을 위한 Container 인스턴스 생성
