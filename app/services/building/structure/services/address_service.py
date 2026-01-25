@@ -46,12 +46,13 @@ class AddressService(AbstractService):
 
         road_address_node = address_raw.get('road_address', {})
         road_address_id = road_address_node.get('road_address_id')
+        address_id = f"{address_raw.get('road_code_id')}{road_address_node.get('road_address_id')}"
 
         if not road_address_id:
             return None
 
         address_exist = self.manager.driver(self.DRIVER_MONGODB).set_arguments({
-            'building_manage_number': road_address_id,
+            'address_id': address_id,
             'updated_at': {'$gt': role_date}
         }).read_one()
 
