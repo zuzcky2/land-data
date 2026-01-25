@@ -63,7 +63,7 @@ class StructureBuildCommand(AbstractCommand):
         """building_structure:address 명령어의 실제 구현부"""
         service = location_raw_facade.road_code_service
         page = 1
-        per_page = 1000
+        per_page = 10000
         total_count = 0
         last_id = None
 
@@ -93,8 +93,6 @@ class StructureBuildCommand(AbstractCommand):
                     if not items:
                         self.message("✅ 빌드 완료", fg='blue')
                         break
-
-                    self._worker_address_build_task(items[0])
 
                     # 병렬 처리
                     results = pool.map(self._worker_address_build_task, items)
