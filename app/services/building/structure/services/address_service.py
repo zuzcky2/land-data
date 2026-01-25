@@ -46,7 +46,7 @@ class AddressService(AbstractService):
 
         road_address_node = address_raw.get('road_address', {})
         road_address_id = road_address_node.get('road_address_id')
-        address_id = f"{address_raw.get('road_code_id')}{road_address_node.get('road_address_id')}"
+        address_id = f"{address_raw.get('road_code_id')}_{road_address_node.get('road_address_id')}"
 
         if not road_address_id:
             return None
@@ -100,6 +100,7 @@ class AddressService(AbstractService):
                 'parcel_addresses': parcel_addresses,
                 'pnu_list': pnu_list,
                 'query': road_query,
+                'updated_at': {'$gt': role_date},
                 'bbox': district_boundary.bbox,
                 'page': 1,
                 'per_page': 10
@@ -124,10 +125,14 @@ class AddressService(AbstractService):
                     'id': pt_item.get('continuous_id'),
                     'bdMgtSn': road_address_id,
                     'latitude': float(pt.get('x', 0)),
-                    'longitude': float(pt.get('y', 0))
+                    'longitude': float(pt.get('y', 0)),
+                    'updated_at': {'$gt': role_date},
                 })
+
                 if continuous and 'id' in continuous:
                     continuous_items.append(continuous)
+                    pt_item['continuous_id'] = continuous['id']
+                    self._raw_point_geometry_service.manager.mongodb_driver.store([pt_item])
 
             dto = self.address_dto_handler.handle(
                 address_raw=address_raw,
