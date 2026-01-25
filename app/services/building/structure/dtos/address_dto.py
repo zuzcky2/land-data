@@ -43,7 +43,9 @@ class BlockAddressDto(BaseModel):
     display_block_short_address: str = Field(title='전체 지번 짧은 주소 문자열')
 
 class AddressDto(MongoModel):
+    address_id: str = Field(title='유니크 아이디 road_code_id + building_manage_number')
     building_manage_number: str = Field(None, title='건물관리번호 (25자리, bdMgtSn)')
+    road_code_id: str = Field(title='도로명 코드')
     address_name: Optional[str] = Field(None, title='주소 이름')
     display_address_name: str = Field(None, title='주소 표기 이름')
 

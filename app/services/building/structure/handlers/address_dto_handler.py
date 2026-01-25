@@ -51,7 +51,9 @@ class AddressDtoHandler:
         build_nm = building_group.get('build_nm').strip() if building_group.get('build_nm') else None
 
         return AddressDto(
+            address_id=f"{address_raw.get('road_code_id')}_{bd_mgt_sn}",
             building_manage_number=bd_mgt_sn,
+            road_code_id=address_raw.get('road_code_id'),
             address_name=sgg_build_nm or build_nm or display_road,
             display_address_name=address_raw.get('road_nm'),
             state=state_boundary.item_code,

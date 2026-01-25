@@ -1,3 +1,5 @@
+from typing import Optional
+
 from app.services.contracts.dto import PaginationDto
 from app.services.location.raw.managers.road_address_manager import RoadAddressManager
 from app.services.location.raw.services.abstract_address_service import AbstractAddressService
@@ -15,20 +17,23 @@ class RoadCodeService(AbstractAddressService):
     def manager(self) -> RoadAddressManager:
         return self._manager
 
-    def get_road_code_aggregate(self, page: int = 1, per_page: int = 1000) -> PaginationDto:
+    def get_road_code_aggregate(self, page: int = 1, per_page: int = 1000, match_params: Optional[dict] = None) -> PaginationDto:
         # 페이지네이션을 위한 skip 계산
         driver = self.manager.mongodb_driver
 
         now = datetime.now()
         role_date = now - timedelta(days=7)
 
-        match = {
-            '$or': [
-                {'updated_at': {'$gt': role_date}},
-                {'address_id': {'$exists': False}}
-            ],
-            'dead': {'$ne': True},
-        }
+        if match_params:
+            match = match_params
+        else:
+            match = {
+                '$or': [
+                    {'updated_at': {'$gt': role_date}},
+                    {'address_id': {'$exists': False}}
+                ],
+                'dead': {'$ne': True},
+            }
 
         total = driver.set_arguments(match)._get_total_count()
 

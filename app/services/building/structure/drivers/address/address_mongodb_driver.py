@@ -9,7 +9,7 @@ class AddressMongodbDriver(AbstractMongodbDriver, DriverInterface):
 
     @property
     def primary_key(self) -> str:
-        return 'building_manage_number'
+        return 'address_id'
 
     @property
     def collection(self) -> Collection:
@@ -20,5 +20,5 @@ class AddressMongodbDriver(AbstractMongodbDriver, DriverInterface):
     @property
     def convert_types(self) -> dict:
         return {
-            'building_manage_number': str
+            'address_id': str
         }

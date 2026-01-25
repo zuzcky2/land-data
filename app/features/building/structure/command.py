@@ -31,9 +31,9 @@ class StructureBuildCommand(AbstractCommand):
             # 만약 result가 None이면 'NoneType' 에러 방지를 위해 방어 로직 강화
             if result:
                 # result가 객체라면 getattr 사용, dict라면 .get() 사용
-                address_id = getattr(result, 'building_manage_number', None)
+                address_id = getattr(result, 'address_id', None)
                 if address_id is None and isinstance(result, dict):
-                    address_id = result.get('building_manage_number')
+                    address_id = result.get('address_id')
 
                 item['address_id'] = address_id
                 item['dead'] = False
@@ -63,7 +63,7 @@ class StructureBuildCommand(AbstractCommand):
         """building_structure:address 명령어의 실제 구현부"""
         service = location_raw_facade.road_code_service
         page = 1
-        per_page = 10000
+        per_page = 1000
         total_count = 0
         last_id = None
 
@@ -94,6 +94,8 @@ class StructureBuildCommand(AbstractCommand):
                         self.message("✅ 빌드 완료", fg='blue')
                         break
 
+                    self._worker_address_build_task(items[0])
+
                     # 병렬 처리
                     results = pool.map(self._worker_address_build_task, items)
 
@@ -120,6 +122,59 @@ class StructureBuildCommand(AbstractCommand):
 
         except Exception as e:
             self._handle_error(e, "공간정보 빌드 프로세스 중단")
+
+    def address_update_handle(self):
+        """building_structure:address 명령어의 실제 구현부"""
+        service = structure_facade.address_service
+        page = 1
+        per_page = 10000
+        total_count = 0
+
+        self._send_slack("🏗️ 공간정보 결합 빌드 프로세스 가동")
+
+        while True:
+            address_pagination = service.get_list({
+                'page': page,
+                'per_page': per_page,
+                'geo_point': None,
+                'sort': [('_id', -1)]
+            })
+
+            items = getattr(address_pagination, 'items', [])
+
+            if not items or len(items) < 1:
+                self.message("✅ 빌드 완료", fg='blue')
+                break
+
+            i = 0
+            for item in items:
+                match = {
+                    'address_id': item['building_manage_number']
+                }
+
+                address_raw_pagination = location_raw_facade.road_code_service.get_road_code_aggregate(
+                    1, 1, match_params=match)
+
+                address_raw = address_raw_pagination.items[0] if len(address_raw_pagination.items) > 0 else None
+
+                i = i + 1
+
+                if address_raw:
+                    dd(address_raw)
+                    self._worker_address_build_task(address_raw)
+                else:
+                    dd(service.manager.mongodb_driver.collection)
+
+            last_item = items[-1]
+            last_id = last_item['_id']
+            total_count += len(items)
+            page = page + 1
+
+            if len(items) < per_page:
+                break
+
+            self.message(f"✨ 전체 작업 종료 (총 {total_count}건)", fg='blue', bg='white')
+            self._send_slack(f"✨ 빌드 완료 (총 {total_count}건 처리)")
 
     @staticmethod
     def _worker_complex_build_task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -230,6 +285,10 @@ class StructureBuildCommand(AbstractCommand):
         @click.option('--renew', 'is_renew', is_flag=True)
         def build_address_cmd(is_continue, is_renew):
             self.address_handle(is_continue, is_renew)
+
+        @cli_group.command('building_structure:address-update', help='수집된 주소 기반 공간정보 결합')
+        def build_address_cmd():
+            self.address_update_handle()
 
         @cli_group.command('building_structure:complex', help='주소 공간정보 기반 단지정보 생성')
         @click.option('--continue', 'is_continue', is_flag=True)
