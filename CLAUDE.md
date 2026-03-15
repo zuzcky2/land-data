@@ -5,8 +5,32 @@
 ## 개발 환경
 
 - **로컬**: `/Users/kjs/workspace/landmark/land-data`
-- **개발 서버**: `Host dev` (192.168.219.120), 프로젝트 경로 `/home/kjs/workspace/landmark/data`
+- **개발 서버**: `Host dev` (192.168.219.120 / Tailscale: `100.96.88.2`), 프로젝트 경로 `/home/kjs/workspace/landmark/data`
 - **런타임**: Docker 컨테이너 (`landmark-data`) 내부에서 실행
+
+### SSH 접속
+
+```bash
+ssh dev       # 홈 네트워크 내부 (192.168.219.120)
+ssh dev-ts    # 외부 네트워크 — Tailscale 경유 (100.96.88.2)
+```
+
+`~/.ssh/config` 설정:
+```
+Host dev
+    HostName 192.168.219.120
+    User kjs
+    IdentityFile ~/.ssh/id_rsa_dev
+    Port 22
+
+Host dev-ts
+    HostName 100.96.88.2
+    User kjs
+    IdentityFile ~/.ssh/id_rsa_dev
+    Port 22
+```
+
+> 다른 맥북에서 접속 시: Tailscale 설치 후 동일 계정(`jjambbongjoa@`) 로그인 → `ssh dev-ts` 로 접속
 
 ### 명령어 실행 방법
 
