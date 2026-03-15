@@ -67,7 +67,9 @@ class StructureContainer(AbstractContainer):
         address_service=address_service,
         basic_info_service=building_raw.basic_info_service,
         group_info_service=building_raw.group_info_service,
-        title_info_service=building_raw.title_info_service
+        title_info_service=building_raw.title_info_service,
+        kapt_basic_service=building_raw.kapt_basic_service,
+        kapt_detail_service=building_raw.kapt_detail_service,
     )
 
     # ── Building ─────────────────────────────────────────────────────────────

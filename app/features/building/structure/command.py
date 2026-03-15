@@ -473,6 +473,71 @@ class StructureBuildCommand(AbstractCommand):
         except Exception as e:
             self._handle_error(e, "호실 빌드 프로세스 중단")
 
+    # ──────────────────────────────── KAPT SYNC ──────────────────────────────
+
+    @staticmethod
+    def _worker_kapt_sync_task(item: Dict[str, Any]) -> Dict[str, Any]:
+        current_id = item.get('_id') if item else 'Unknown'
+        try:
+            if item is None:
+                return {'success': False, 'id': 'None', 'error': 'Item is None'}
+            kapt_code = item.get('kaptCode')
+            if not kapt_code:
+                return {'success': False, 'id': current_id, 'error': 'No kaptCode'}
+            matched = structure_facade.complex_service.sync_kapt(item)
+            return {'success': True, 'id': current_id, 'matched': matched}
+        except Exception as e:
+            import traceback
+            return {'success': False, 'id': current_id, 'error': f"{str(e)}\n{traceback.format_exc()}"}
+
+    def kapt_sync_handle(self):
+        """K-APT 단지 정보를 complexes에 병합합니다."""
+        per_page = 1000
+        total_count = 0
+        matched_count = 0
+
+        self._send_slack("🔗 K-APT 단지 정보 complexes 병합 시작")
+        self.message("🔗 K-APT → complexes 병합을 시작합니다.", fg='green')
+
+        try:
+            with Pool(processes=4) as pool:
+                page = 1
+                while True:
+                    pagination = building_raw_facade.kapt_basic_service.get_list({
+                        'page': page, 'per_page': per_page
+                    })
+                    items = getattr(pagination, 'items', [])
+
+                    if not items:
+                        self.message("✅ K-APT 병합 완료", fg='blue')
+                        break
+
+                    results = pool.map(self._worker_kapt_sync_task, items)
+
+                    chunk_matched = sum(1 for r in results if r.get('matched'))
+                    chunk_success = sum(1 for r in results if r['success'])
+                    for r in results:
+                        if not r['success']:
+                            self.message(f"❌ (ID: {r['id']}): {r['error'][:100]}", fg='red')
+
+                    total_count += len(items)
+                    matched_count += chunk_matched
+                    page += 1
+
+                    self.message(
+                        f"  -> {total_count}건 처리 (매칭: {matched_count}, 페이지: {page-1})",
+                        fg='white'
+                    )
+
+                    if len(items) < per_page:
+                        break
+
+            self.message(f"✨ K-APT 병합 완료 (총 {total_count}건, 매칭 {matched_count}건)", fg='blue', bg='white')
+            self._send_slack(f"✨ K-APT 병합 완료 ({matched_count}/{total_count} 매칭)")
+
+        except Exception as e:
+            self._handle_error(e, "K-APT 병합 프로세스 중단")
+
     # ──────────────────────────────── REGISTER ───────────────────────────────
 
     def register_commands(self, cli_group):
@@ -507,6 +572,10 @@ class StructureBuildCommand(AbstractCommand):
         @click.option('--continue', 'is_continue', is_flag=True)
         def build_unit_cmd(is_continue):
             self.unit_handle(is_continue)
+
+        @cli_group.command('building_structure:kapt-sync', help='K-APT 단지 정보를 complexes에 병합')
+        def kapt_sync_cmd():
+            self.kapt_sync_handle()
 
 
 __all__ = ['StructureBuildCommand']
