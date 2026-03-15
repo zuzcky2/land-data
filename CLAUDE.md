@@ -2,6 +2,42 @@
 
 한국 부동산 데이터 수집/가공 플랫폼. 건축물대장 공공데이터를 수집하여 단지→건물→층→호실 계층 구조로 정규화한다.
 
+## 현재 진행 상황 (2026-03-15 기준)
+
+### 빌드 상태
+
+| 컬렉션 | 상태 | 현재 건수 | 목표 |
+|--------|------|----------|------|
+| addresses | **빌드 중** | ~838K | ~3.2M |
+| complexes | 대기 (address 완료 후 재빌드 예정) | 102,988 | - |
+| buildings | 완료 | 548,286 | - |
+| floors | 완료 | 421,306 | - |
+| units | **빌드 중** | ~1.1M | ~10M |
+
+### 자동 실행 체인 (서버에서 실행 중)
+
+address 빌드 완료 → complex 전체 재빌드 → kapt-sync 순서로 자동 실행됨.
+
+### 빌드 상태 확인 방법
+
+```bash
+# 빠른 현황 확인
+ssh dev-ts "cd /home/kjs/workspace/landmark/data && docker-compose exec -T python bash -c 'tail -3 /var/volumes/log/monitor_builds.log'"
+
+# 컬렉션 건수 확인
+ssh dev-ts "cd /home/kjs/workspace/landmark/data && docker-compose exec -T python bash -c 'python -c \"
+from app.facade import db
+col = db.get_mongodb_driver(\\\\\"mongodb\\\\\").get_database(\\\\\"landmark\\\\\")
+for name in [\\\\\"addresses\\\\\",\\\\\"complexes\\\\\",\\\\\"buildings\\\\\",\\\\\"floors\\\\\",\\\\\"units\\\\\"]:
+    print(name, col.get_collection(name).count_documents({}))
+\"'"
+```
+
+### 모니터링 스크립트
+
+서버 컨테이너 내부에서 독립 실행 중 (`/var/workspace/monitor_builds.sh`).
+로그: `/var/volumes/log/monitor_builds.log` (5분 간격)
+
 ## 개발 환경
 
 - **로컬**: `/Users/kjs/workspace/landmark/land-data`
