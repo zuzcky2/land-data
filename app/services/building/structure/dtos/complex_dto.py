@@ -6,12 +6,12 @@ from datetime import datetime
 
 
 class ComplexDto(MongoModel):
-    building_manage_number: str = Field(None, title='건물관리번호 (25자리, bdMgtSn)')
+    building_manage_number: str = Field(None, title='건물관리번호 (25자리, bdMgtSn) — PK')
 
-    address_id: ObjectId = Field(title='address dto 객체의 id')
+    address_id: Optional[ObjectId] = Field(None, title='addresses 컬렉션 _id 참조')
     item_name: str = Field(title='단지명 (건물명)')
-    register_kind_code: str = Field(title='대장구분 (총괄표제부, 일반건축물, 표제부)')
-    register_manage_number: str = Field(title='총괄표제부, 일반건축물, 표제부의 PK')
+    register_kind_code: str = Field(title='대장구분 (총괄표제부, 일반건축물)')
+    register_manage_number: str = Field(title='총괄표제부 또는 일반건축물의 mgmBldrgstPk')
 
     # 규모 및 면적
     land_area: float = Field(title='대지면적')

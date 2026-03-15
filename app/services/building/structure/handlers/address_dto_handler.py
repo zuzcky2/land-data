@@ -8,14 +8,16 @@ from app.services.location.boundary.dto import BoundaryItemDto
 class AddressDtoHandler:
 
     def handle(self,
-               address_raw: Dict[str, Any],
+               building_raw: Dict[str, Any],
+               road_address: Dict[str, Any],
+               road_code: Optional[Dict[str, Any]],
+               building_group: Optional[Dict[str, Any]],
                processed_blocks_data: List[Dict],
                continuous_items: List[Dict],
                state_boundary: BoundaryItemDto,
                district_boundary: BoundaryItemDto) -> AddressDto:
 
-        road_address_node = address_raw.get('road_address', {})
-        bd_mgt_sn = road_address_node.get('road_address_id')
+        bd_mgt_sn = building_raw.get('bdMgtSn')
 
         # 1. 지오메트리 처리
         merged_geometry, center_pt = self._process_geometries(continuous_items)
@@ -38,24 +40,22 @@ class AddressDtoHandler:
             related_blocks.append(block_dto)
 
         # 3. 도로명 정보 가공
-        road_suffix = self._combine_num(road_address_node.get('build_mnnm'), road_address_node.get('build_slno'))
-        road_nm = address_raw.get('road_nm', '')
+        road_nm = road_code.get('road_nm', '') if road_code else ''
+        road_suffix = self._combine_num(road_address.get('build_mnnm'), road_address.get('build_slno'))
         display_road = f"{road_nm} {road_suffix}".strip()
 
-        # 도로명 주소 문자열 조합 (시도 시군구 도로명...)
         full_road_addr = f"{district_boundary.item_full_name} {display_road}"
 
-        building_group = address_raw.get('road_address', {}).get('building_group', {})
-
-        sgg_build_nm = building_group.get('sgg_build_nm').strip() if building_group.get('sgg_build_nm') else None
-        build_nm = building_group.get('build_nm').strip() if building_group.get('build_nm') else None
+        building_group = building_group or {}
+        sgg_build_nm = building_group.get('sgg_build_nm', '').strip() or None
+        build_nm = building_group.get('build_nm', '').strip() or None
+        bld_nm_raw = str(building_raw.get('bldNm', '')).strip()
+        address_name = sgg_build_nm or build_nm or bld_nm_raw or display_road
 
         return AddressDto(
-            address_id=f"{address_raw.get('road_code_id')}_{bd_mgt_sn}",
             building_manage_number=bd_mgt_sn,
-            road_code_id=address_raw.get('road_code_id'),
-            address_name=sgg_build_nm or build_nm or display_road,
-            display_address_name=address_raw.get('road_nm'),
+            address_name=address_name,
+            display_address_name=road_nm,
             state=state_boundary.item_code,
             state_name=state_boundary.item_name,
             state_short_name=state_boundary.short_name,
@@ -63,14 +63,14 @@ class AddressDtoHandler:
             district_name=district_boundary.item_name,
             township_admin=building_group.get('h_dong_code'),
             township_admin_name=building_group.get('h_dong_nm'),
-            zip_code=building_group.get('zip_code'),
+            zip_code=building_group.get('zip_code') or road_address.get('basic_area_no'),
             is_apartment=building_group.get('is_apartment') == '1',
             main_block=main_block,
             related_blocks=related_blocks,
-            road_name_code=address_raw.get('road_code'),
+            road_name_code=building_raw.get('naRoadCd'),
             road_name=road_nm,
-            road_main=str(road_address_node.get('build_mnnm', '')),
-            road_sub=str(road_address_node.get('build_slno', '')) if road_address_node.get('build_slno', '') else None,
+            road_main=str(road_address.get('build_mnnm', '')),
+            road_sub=str(road_address.get('build_slno', '')) if road_address.get('build_slno') else None,
             display_road=display_road,
             display_road_address=full_road_addr,
             display_road_short_address=full_road_addr.replace(state_boundary.item_name, state_boundary.short_name),
@@ -88,10 +88,8 @@ class AddressDtoHandler:
         bsub = str(raw.get('lnbr_slno', ''))
         block_suffix = self._combine_num(bmain, bsub)
 
-        # PNU 생성 (법정동10 + 산1 + 본번4 + 부번4)
         pnu = raw.get('bjd_code', '') + (raw.get('mountain_yn') or '0') + bmain.zfill(4) + bsub.zfill(4)
 
-        # 전체 행정구역 주소 (시도 시군구 읍면동 리)
         boundary_parts = [district_boundary.item_full_name, township_boundary.item_name if township_boundary else ""]
         if village_boundary: boundary_parts.append(village_boundary.item_name)
         full_boundary = " ".join([p for p in boundary_parts if p]).strip()
@@ -106,7 +104,7 @@ class AddressDtoHandler:
             display_boundary_short_address=full_boundary.replace(state_boundary.item_name, state_boundary.short_name),
             is_mountain=raw.get('mountain_yn') == '1',
             is_representative=raw.get('representative_yn') == '1',
-            sort_number=int(raw.get('serial_no')),
+            sort_number=int(raw.get('serial_no', 0)),
             block_main=bmain,
             block_sub=None if bsub == '0' else bsub,
             display_block=f"{township_boundary.item_name if township_boundary else ''} {block_suffix}".strip(),

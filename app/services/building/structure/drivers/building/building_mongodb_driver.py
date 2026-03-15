@@ -5,20 +5,21 @@ from app.services.building.structure.drivers.abstract_mongodb_driver import Abst
 from app.services.building.structure.drivers.driver_interface import DriverInterface
 from app.facade import db
 
-class AddressMongodbDriver(AbstractMongodbDriver, DriverInterface):
+
+class BuildingMongodbDriver(AbstractMongodbDriver, DriverInterface):
 
     @property
     def primary_key(self) -> str:
-        return 'building_manage_number'
+        return 'register_manage_number'
 
     @property
     def collection(self) -> Collection:
         return db.get_mongodb_driver('mongodb') \
                             .get_database('landmark') \
-                            .get_collection('addresses')
+                            .get_collection('buildings')
 
     @property
     def convert_types(self) -> dict:
         return {
-            'building_manage_number': str
+            'register_manage_number': str
         }

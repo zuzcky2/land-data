@@ -39,10 +39,12 @@ class ComplexService(AbstractService):
     def manager(self) -> ComplexManager:
         return self._manager
 
-    def build_by_bd_mgt_sn(self, building_manager_number: str) -> Optional[ComplexDto]:
-        address_item = self._.get_detail({'building_manager_number': building_manager_number})
+    def build_by_bd_mgt_sn(self, building_manage_number: str) -> Optional[ComplexDto]:
+        address_item = self._address_service.manager.driver('mongodb').set_arguments({
+            'building_manage_number': building_manage_number
+        }).read_one()
         if not address_item:
-            Log.get_logger(self.logger_name).warning(f"Raw address not found for: {building_manager_number}")
+            Log.get_logger(self.logger_name).warning(f"Address not found for bdMgtSn: {building_manage_number}")
             return None
 
         return self._run_build_pipeline(AddressDto(**address_item))
@@ -53,33 +55,45 @@ class ComplexService(AbstractService):
         return self._run_build_pipeline(address_dto)
 
     def _run_build_pipeline(self, address_dto: AddressDto):
+        """
+        bdMgtSn 기준 복합 단지 생성. 우선순위: 총괄표제부(1) > 일반건축물(2).
+        표제부(3)는 건물(buildings) 컬렉션 대상이므로 여기서는 처리하지 않음.
+        """
         try:
-            building_params = {
-                'bdMgtSn': address_dto.building_manage_number,
-                'mgmUpBldrgstPk': '0',
-                'regstrKindCd': {'$in': ['1', '2', '3']},
+            bd_mgt_sn = address_dto.building_manage_number
+
+            # 1순위: 총괄표제부(regstrKindCd=1)
+            group_basic = self._basic_info_service.get_detail({
+                'bdMgtSn': bd_mgt_sn,
+                'regstrKindCd': '1',
                 'dead': {'$ne': True}
-            }
+            })
 
-            buildings = self._basic_info_service.get_list(building_params)
+            if group_basic:
+                raw = self._group_info_service.get_detail({
+                    'mgmBldrgstPk': group_basic.get('mgmBldrgstPk')
+                })
+                complex_type = 'group'
+            else:
+                # 2순위: 일반건축물(regstrKindCd=2)
+                title_basic = self._basic_info_service.get_detail({
+                    'bdMgtSn': bd_mgt_sn,
+                    'regstrKindCd': '2',
+                    'dead': {'$ne': True}
+                })
+                if not title_basic:
+                    return None
+                raw = self._title_info_service.get_detail({
+                    'mgmBldrgstPk': title_basic.get('mgmBldrgstPk')
+                })
+                complex_type = 'title'
 
-            for building_info in buildings.items:
-                if building_info.get('regstrKindCd') == '1':
-                    complex_type = 'group'
-                    building = self._group_info_service.get_detail({
-                        'mgmBldrgstPk': building_info.get('mgmBldrgstPk')
-                    })
-                else:
-                    complex_type = 'title'
-                    building = self._title_info_service.get_detail({
-                        'mgmBldrgstPk': building_info.get('mgmBldrgstPk')
-                    })
-
-                if building:
-                    dto = self.complex_dto_handler.handle(address_dto, complex_type, building)
-
-                    if dto:
-                        self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
+            if raw:
+                dto = self.complex_dto_handler.handle(address_dto, complex_type, raw)
+                if dto:
+                    self.manager.driver(self.DRIVER_MONGODB).store([dto.dict()])
+                    return dto
+            return None
 
         except Exception as e:
             Log.get_logger(self.logger_name).error(f"Build Pipeline Error [{address_dto.building_manage_number}]: {str(e)}")
